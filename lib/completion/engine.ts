@@ -13,8 +13,9 @@ import type { MoodleSession } from "../moodle/auth";
 import { LMS, cookieHeader } from "../moodle/auth";
 import { ajax } from "../moodle/client";
 import { getActivities, completionStateOf, type Activity } from "../moodle/activities";
+import { replyToForum } from "../moodle/forum";
 import { registry, strategyFor } from "./registry";
-import type { ActionKind, Outcome, StrategyContext } from "./types";
+import type { ActionKind, Outcome, StrategyContext, RunOptions } from "./types";
 
 export interface PlannedActivity {
   cmid: number;
@@ -66,10 +67,15 @@ export async function plan(
   }));
 }
 
-function makeContext(session: MoodleSession, courseId: number): StrategyContext {
+function makeContext(
+  session: MoodleSession,
+  courseId: number,
+  options: RunOptions = {},
+): StrategyContext {
   return {
     session,
     courseId,
+    forumTexts: (options.forumTexts || []).filter((t) => t.trim().length > 0),
     async mark(cmid, completed) {
       const res = await ajax(
         session,
@@ -84,6 +90,9 @@ function makeContext(session: MoodleSession, courseId: number): StrategyContext 
     async verify(cmid) {
       return completionStateOf(session, courseId, cmid);
     },
+    async replyToForum(forumUrl, message) {
+      return replyToForum(session, forumUrl, message);
+    },
   };
 }
 
@@ -95,9 +104,10 @@ export async function runCourse(
   session: MoodleSession,
   courseId: number,
   onProgress: (e: ProgressEvent) => void,
+  options: RunOptions = {},
 ): Promise<CourseSummary> {
   const acts = await getActivities(session, courseId);
-  const ctx = makeContext(session, courseId);
+  const ctx = makeContext(session, courseId, options);
   const summary: CourseSummary = {
     done: 0,
     already: 0,

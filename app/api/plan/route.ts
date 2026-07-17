@@ -3,6 +3,7 @@ import { unseal, SESSION_COOKIE } from "@/lib/session";
 import { listCourses, resolveCourses, type Course } from "@/lib/moodle/courses";
 import { plan } from "@/lib/completion/engine";
 import { getPreset } from "@/lib/presets";
+import { recordRun } from "@/lib/store/metrics";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -47,6 +48,10 @@ export async function POST(req: NextRequest) {
       const activities = await plan(session, c.id);
       courses.push({ id: c.id, fullname: c.fullname, activities });
     }
+
+    // One run == one plan. /api/run fires once per course, so counting there
+    // would inflate this by the number of courses selected.
+    await recordRun();
 
     return NextResponse.json({ courses, unmatched });
   } catch (e: any) {

@@ -24,6 +24,16 @@ export interface StrategyContext {
   view(url: string): Promise<void>;
   /** Re-read an activity's completion state (null = untracked). */
   verify(cmid: number): Promise<number | null>;
+  /** User-supplied forum reply messages; one is picked at random per forum. */
+  forumTexts: string[];
+  /** Post a reply into a forum (returns true if Moodle accepted it). */
+  replyToForum(forumUrl: string, message: string): Promise<boolean>;
+}
+
+/** Options threaded from the request into the engine and strategy context. */
+export interface RunOptions {
+  /** Reply messages a user provided for post-required forums. */
+  forumTexts?: string[];
 }
 
 export interface RunResult {

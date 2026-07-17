@@ -1,174 +1,22 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-
-/* ------------------------------------------------------------------ */
-/* Types                                                              */
-/* ------------------------------------------------------------------ */
-
-type Screen = "login" | "choose" | "custom" | "run";
-
-type Preset = {
-  id: string;
-  label: string;
-  subtitle: string;
-  courses: string[];
-};
-
-type Course = {
-  id: number;
-  fullname: string;
-};
-
-type Action =
-  | "mark"
-  | "skip-graded"
-  | "skip-none"
-  | "forum"
-  | "view"
-  | "unknown";
-
-type ActivityState = string;
-
-type PlanActivity = {
-  cmid: number;
-  name: string;
-  modname: string;
-  action: Action;
-  state: ActivityState;
-  url: string | null;
-};
-
-type ActivityStatus = "pending" | "done" | "skipped" | "failed" | "already";
-
-type RunActivity = PlanActivity & {
-  status: ActivityStatus;
-  detail?: string; // reason, esp. for failures (e.g. "forum needs a reply")
-};
-
-type PlanCourse = {
-  id: number;
-  fullname: string;
-  activities: PlanActivity[];
-};
-
-type RunCourse = {
-  id: number;
-  fullname: string;
-  activities: RunActivity[];
-  complete: boolean;
-  summary?: RunSummary;
-};
-
-type RunSummary = {
-  done: number;
-  skipped: number;
-  failed: number;
-  already: number;
-  total: number;
-};
-
-type RunMode =
-  | { mode: "preset"; presetId: string }
-  | { mode: "custom"; courseIds: number[] };
-
-type LogLine = {
-  id: number;
-  text: string;
-  tone: "info" | "good" | "warn" | "bad";
-};
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useApp } from "@/lib/run/AppContext";
+import { loadHistory, latestPerCourse } from "@/lib/run/history";
+import { parseForumTexts, DEFAULT_FORUM_TEXTS } from "@/lib/run/prefs";
+import { mivaCourseUrl, timeAgo } from "@/lib/format";
+import type {
+  Action,
+  ActivityStatus,
+  Course,
+  HistoryRecord,
+  Preset,
+} from "@/lib/run/types";
 
 /* ------------------------------------------------------------------ */
 /* Small helpers                                                      */
 /* ------------------------------------------------------------------ */
-
-const LAST_RUN_KEY = "miva-cliq-last";
-const HISTORY_PREFIX = "miva-cliq-history:";
-const LMS_BASE = "https://lms.miva.university";
-
-/** Deep-link to a course on the Miva LMS (opens the real dashboard). */
-function mivaCourseUrl(courseId: number): string {
-  return `${LMS_BASE}/course/view.php?id=${courseId}`;
-}
-
-/* ---- per-device run history (localStorage, namespaced by user email) ---- */
-
-type HistoryCourse = {
-  id: number;
-  fullname: string;
-  done: number;
-  already: number;
-  skipped: number;
-  failed: number;
-  total: number;
-  pct: number;
-  failures: { name: string; detail?: string }[];
-};
-
-type HistoryRecord = {
-  at: string; // ISO timestamp
-  mode: "preset" | "custom";
-  courses: HistoryCourse[];
-};
-
-function historyKey(email: string): string {
-  return HISTORY_PREFIX + (email || "anon").toLowerCase();
-}
-
-function loadHistory(email: string): HistoryRecord[] {
-  try {
-    const raw = localStorage.getItem(historyKey(email));
-    const arr = raw ? (JSON.parse(raw) as HistoryRecord[]) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistoryRecord(email: string, record: HistoryRecord): void {
-  try {
-    const list = loadHistory(email);
-    list.unshift(record);
-    localStorage.setItem(historyKey(email), JSON.stringify(list.slice(0, 25)));
-  } catch {
-    /* ignore quota / privacy mode */
-  }
-}
-
-/** Latest result per course across all runs (for the "your courses" view). */
-function latestPerCourse(history: HistoryRecord[]): {
-  course: HistoryCourse;
-  at: string;
-}[] {
-  const seen = new Map<number, { course: HistoryCourse; at: string }>();
-  for (const rec of history) {
-    for (const c of rec.courses) {
-      if (!seen.has(c.id)) seen.set(c.id, { course: c, at: rec.at });
-    }
-  }
-  return Array.from(seen.values());
-}
-
-function timeAgo(iso: string): string {
-  try {
-    const then = new Date(iso).getTime();
-    const mins = Math.round((Date.now() - then) / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.round(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.round(hrs / 24)}d ago`;
-  } catch {
-    return "";
-  }
-}
 
 const ACTION_META: Record<Action, { label: string; icon: string }> = {
   mark: { label: "Complete", icon: "✓" },
@@ -193,145 +41,20 @@ function statusIcon(status: ActivityStatus): { icon: string; cls: string } {
   }
 }
 
-/** Robust SSE reader: parses event:/data: lines across chunk boundaries. */
-async function readSSE(
-  response: Response,
-  onEvent: (event: string, data: string) => void,
-): Promise<void> {
-  const body = response.body;
-  if (!body) throw new Error("No response body");
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  const flush = (raw: string) => {
-    if (!raw.trim()) return;
-    let event = "message";
-    const dataLines: string[] = [];
-    for (const line of raw.split("\n")) {
-      const clean = line.replace(/\r$/, "");
-      if (clean.startsWith("event:")) {
-        event = clean.slice(6).trim();
-      } else if (clean.startsWith("data:")) {
-        dataLines.push(clean.slice(5).replace(/^\s/, ""));
-      }
-    }
-    if (dataLines.length) onEvent(event, dataLines.join("\n"));
-  };
-
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let sep: number;
-    // Events are separated by a blank line (\n\n).
-    while ((sep = buffer.indexOf("\n\n")) !== -1) {
-      const raw = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      flush(raw);
-    }
-  }
-  buffer += decoder.decode();
-  if (buffer.trim()) flush(buffer);
-}
-
 /* ------------------------------------------------------------------ */
 /* Root component                                                     */
 /* ------------------------------------------------------------------ */
 
 export default function Page() {
-  const [screen, setScreen] = useState<Screen>("login");
-  const [name, setName] = useState<string>("");
-  const [email, setEmail] = useState<string>("");
-  const [runMode, setRunMode] = useState<RunMode | null>(null);
-  const [authNotice, setAuthNotice] = useState<string | null>(null);
-
-  // Called by any screen when a request returns 401 (session lapsed/missing).
-  const onSessionExpired = useCallback((msg?: string) => {
-    setName("");
-    setRunMode(null);
-    setAuthNotice(msg || "Your session expired. Please log in again.");
-    setScreen("login");
-  }, []);
+  const { screen } = useApp();
 
   return (
-    <main className="app">
-      <div className="bg-orbs" aria-hidden="true">
-        <span className="orb orb-a" />
-        <span className="orb orb-b" />
-        <span className="orb orb-c" />
-      </div>
-
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            ⚡
-          </span>
-          <span className="brand-name">Miva&nbsp;Cliq</span>
-        </div>
-        {screen !== "login" && name ? (
-          <div className="topbar-user" title={name}>
-            <span className="avatar" aria-hidden="true">
-              {name.trim().charAt(0).toUpperCase() || "M"}
-            </span>
-            <span className="topbar-name">{name}</span>
-          </div>
-        ) : null}
-      </header>
-
-      <div className="stage">
-        {screen === "login" && (
-          <LoginScreen
-            notice={authNotice}
-            onSuccess={(n, mail) => {
-              setAuthNotice(null);
-              setName(n);
-              setEmail(mail);
-              setScreen("choose");
-            }}
-          />
-        )}
-
-        {screen === "choose" && (
-          <ChooseScreen
-            name={name}
-            email={email}
-            onCustom={() => setScreen("custom")}
-            onRunPreset={(presetId) => {
-              setRunMode({ mode: "preset", presetId });
-              setScreen("run");
-            }}
-          />
-        )}
-
-        {screen === "custom" && (
-          <CustomScreen
-            onBack={() => setScreen("choose")}
-            onSessionExpired={onSessionExpired}
-            onStart={(courseIds) => {
-              setRunMode({ mode: "custom", courseIds });
-              setScreen("run");
-            }}
-          />
-        )}
-
-        {screen === "run" && runMode && (
-          <RunScreen
-            runMode={runMode}
-            email={email}
-            onSessionExpired={onSessionExpired}
-            onDone={() => setScreen("choose")}
-          />
-        )}
-      </div>
-
-      <footer className="footer">
-        <span>Miva Cliq</span>
-        <span aria-hidden="true">·</span>
-        <span>Your coursework, on autopilot.</span>
-      </footer>
-    </main>
+    <>
+      {screen === "login" && <LoginScreen />}
+      {screen === "choose" && <ChooseScreen />}
+      {screen === "custom" && <CustomScreen />}
+      {screen === "run" && <RunScreen />}
+    </>
   );
 }
 
@@ -339,13 +62,8 @@ export default function Page() {
 /* Login                                                              */
 /* ------------------------------------------------------------------ */
 
-function LoginScreen({
-  onSuccess,
-  notice,
-}: {
-  onSuccess: (name: string, email: string) => void;
-  notice?: string | null;
-}) {
+function LoginScreen() {
+  const { signIn, authNotice } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -371,7 +89,7 @@ function LoginScreen({
         /* ignore parse errors */
       }
       if (res.ok && data?.ok) {
-        onSuccess(data.name || email.split("@")[0] || "there", email.trim());
+        signIn(data.name || email.split("@")[0] || "there", email.trim());
       } else {
         setError(data?.error || "We couldn't log you in. Check your details and try again.");
       }
@@ -397,10 +115,18 @@ function LoginScreen({
           </p>
         </div>
 
-        {notice && !error && (
+        {/* Handing over an LMS password is the moment people hesitate — answer
+            the three obvious worries right here, not buried on another page. */}
+        <ul className="trust-strip" aria-label="What Miva Cliq does and doesn't do">
+          <li className="pill pill-ghost">🎓 Graded tests never touched</li>
+          <li className="pill pill-ghost">🔒 Password never stored</li>
+          <li className="pill pill-ghost">✓ Every completion verified</li>
+        </ul>
+
+        {authNotice && !error && (
           <div className="alert alert-notice" role="status">
             <span aria-hidden="true">🔑</span>
-            <span>{notice}</span>
+            <span>{authNotice}</span>
           </div>
         )}
 
@@ -471,7 +197,10 @@ function LoginScreen({
 
         <p className="reassure">
           🔒 Your login is used only to complete your own coursework. Nothing is
-          stored after you close this.
+          stored after you close this.{" "}
+          <Link className="miva-link" href="/how-it-works">
+            How it works
+          </Link>
         </p>
       </div>
     </section>
@@ -482,17 +211,8 @@ function LoginScreen({
 /* Choose                                                             */
 /* ------------------------------------------------------------------ */
 
-function ChooseScreen({
-  name,
-  email,
-  onCustom,
-  onRunPreset,
-}: {
-  name: string;
-  email: string;
-  onCustom: () => void;
-  onRunPreset: (presetId: string) => void;
-}) {
+function ChooseScreen() {
+  const { name, email, setScreen, startRun } = useApp();
   const [presets, setPresets] = useState<Preset[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -584,7 +304,7 @@ function ChooseScreen({
         <button
           type="button"
           className="select-card"
-          onClick={onCustom}
+          onClick={() => setScreen("custom")}
           aria-label="Custom: pick your own courses"
         >
           <div className="select-card-top">
@@ -661,17 +381,104 @@ function ChooseScreen({
         </div>
       )}
 
+      <ForumTextsEditor />
+
       {modalOpen && preset && (
         <PresetModal
           preset={preset}
           onClose={() => setModalOpen(false)}
           onConfirm={() => {
             setModalOpen(false);
-            onRunPreset(preset.id);
+            startRun({ mode: "preset", presetId: preset.id });
           }}
         />
       )}
     </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Forum reply texts editor                                           */
+/* ------------------------------------------------------------------ */
+
+function ForumTextsEditor() {
+  const { forumTexts, setForumTexts } = useApp();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  // Sync the textarea from context whenever the panel opens.
+  useEffect(() => {
+    if (open) setDraft(forumTexts.join("\n"));
+  }, [open, forumTexts]);
+
+  const count = forumTexts.length;
+
+  const save = () => {
+    const parsed = parseForumTexts(draft);
+    setForumTexts(parsed);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1800);
+  };
+
+  return (
+    <div className="forum-editor">
+      <button
+        type="button"
+        className="forum-editor-head"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className={`chevron ${open ? "open" : ""}`} aria-hidden="true">
+          ▸
+        </span>
+        <span className="forum-editor-title">
+          💬 Forum reply messages
+        </span>
+        <span className="forum-editor-meta">
+          <span className="pill pill-ghost">
+            {count} {count === 1 ? "message" : "messages"}
+          </span>
+        </span>
+      </button>
+
+      {open && (
+        <div className="forum-editor-body">
+          <p className="subtle">
+            Some forums only complete once you post a reply. Add a few messages
+            below — one per line — and we&apos;ll post a random one to each of
+            those forums. Keep them relevant and appropriate; they&apos;re
+            visible to your class.
+          </p>
+          <textarea
+            className="forum-textarea"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={6}
+            placeholder="One reply message per line…"
+            aria-label="Forum reply messages, one per line"
+          />
+          <div className="forum-editor-actions">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setDraft(DEFAULT_FORUM_TEXTS.join("\n"))}
+            >
+              Reset to defaults
+            </button>
+            <span className="grow" />
+            {saved && <span className="saved-note">Saved ✓</span>}
+            <button type="button" className="btn btn-primary btn-sm" onClick={save}>
+              Save messages
+            </button>
+          </div>
+          <p className="forum-editor-hint subtle">
+            Leave this empty to skip forum posting — those forums will just be
+            reported as needing a manual reply.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -792,15 +599,8 @@ function PresetModal({
 /* Custom (searchable multi-select)                                   */
 /* ------------------------------------------------------------------ */
 
-function CustomScreen({
-  onBack,
-  onStart,
-  onSessionExpired,
-}: {
-  onBack: () => void;
-  onStart: (courseIds: number[]) => void;
-  onSessionExpired: (msg?: string) => void;
-}) {
+function CustomScreen() {
+  const { setScreen, startRun, onSessionExpired } = useApp();
   const [courses, setCourses] = useState<Course[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -869,7 +669,7 @@ function CustomScreen({
   return (
     <section className="fade-in custom-wrap" aria-labelledby="custom-title">
       <div className="section-head">
-        <button className="btn btn-ghost btn-sm" onClick={onBack}>
+        <button className="btn btn-ghost btn-sm" onClick={() => setScreen("choose")}>
           <span aria-hidden="true">←</span> Back
         </button>
         <div>
@@ -958,7 +758,7 @@ function CustomScreen({
           type="button"
           className="btn btn-primary"
           disabled={selected.size === 0}
-          onClick={() => onStart(Array.from(selected))}
+          onClick={() => startRun({ mode: "custom", courseIds: Array.from(selected) })}
         >
           Start <span aria-hidden="true">→</span>
         </button>
@@ -968,299 +768,27 @@ function CustomScreen({
 }
 
 /* ------------------------------------------------------------------ */
-/* Run                                                                */
+/* Run — pure view over AppContext (the run loop itself lives in the   */
+/* provider so it survives navigating to /gists etc.)                  */
 /* ------------------------------------------------------------------ */
 
-function RunScreen({
-  runMode,
-  email,
-  onDone,
-  onSessionExpired,
-}: {
-  runMode: RunMode;
-  email: string;
-  onDone: () => void;
-  onSessionExpired: (msg?: string) => void;
-}) {
-  const [phase, setPhase] = useState<
-    "planning" | "plan-error" | "running" | "finished"
-  >("planning");
-  const [planError, setPlanError] = useState<string | null>(null);
-  const [unmatched, setUnmatched] = useState<string[]>([]);
-  const [courses, setCourses] = useState<RunCourse[]>([]);
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [logs, setLogs] = useState<LogLine[]>([]);
-  const [activeCourseId, setActiveCourseId] = useState<number | null>(null);
-  const logId = useRef(0);
-  const cancelled = useRef(false);
+function RunScreen() {
+  const {
+    phase,
+    planError,
+    unmatched,
+    courses,
+    logs,
+    activeCourseId,
+    expanded,
+    totals,
+    pct,
+    setScreen,
+    retryPlan,
+    toggleExpand,
+  } = useApp();
 
-  const pushLog = useCallback((text: string, tone: LogLine["tone"] = "info") => {
-    setLogs((prev) => {
-      const next = [...prev, { id: logId.current++, text, tone }];
-      return next.slice(-8);
-    });
-  }, []);
-
-  /* ---- overall totals ---- */
-  const totals = useMemo(() => {
-    let total = 0;
-    let handled = 0;
-    let done = 0;
-    let skipped = 0;
-    let failed = 0;
-    let already = 0;
-    for (const c of courses) {
-      for (const a of c.activities) {
-        total += 1;
-        if (a.status !== "pending") handled += 1;
-        if (a.status === "done") done += 1;
-        else if (a.status === "already") already += 1;
-        else if (a.status === "skipped") skipped += 1;
-        else if (a.status === "failed") failed += 1;
-      }
-    }
-    return { total, handled, done, skipped, failed, already };
-  }, [courses]);
-
-  /* ---- planning ---- */
-  const doPlan = useCallback(async () => {
-    setPhase("planning");
-    setPlanError(null);
-    cancelled.current = false;
-    try {
-      const body =
-        runMode.mode === "preset"
-          ? { presetId: runMode.presetId }
-          : { courseIds: runMode.courseIds };
-      const res = await fetch("/api/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(body),
-      });
-      if (res.status === 401) {
-        onSessionExpired();
-        return;
-      }
-      if (!res.ok) {
-        let msg = "Planning failed.";
-        try {
-          const d = await res.json();
-          if (d?.error) msg = d.error;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(msg);
-      }
-      const data = await res.json();
-      const planned: PlanCourse[] = data?.courses ?? [];
-      setUnmatched(Array.isArray(data?.unmatched) ? data.unmatched : []);
-      const mapped: RunCourse[] = planned.map((c) => ({
-        id: c.id,
-        fullname: c.fullname,
-        complete: false,
-        activities: (c.activities ?? []).map((a) => ({
-          ...a,
-          status: "pending" as ActivityStatus,
-        })),
-      }));
-      if (mapped.length === 0) {
-        throw new Error(
-          "None of the selected courses could be found in your account.",
-        );
-      }
-      setCourses(mapped);
-      setExpanded(new Set(mapped.length ? [mapped[0].id] : []));
-      pushLog(`Planned ${mapped.length} course(s).`, "good");
-      setPhase("running");
-    } catch (e: any) {
-      setPlanError(e?.message || "Planning failed.");
-      setPhase("plan-error");
-    }
-  }, [runMode, pushLog, onSessionExpired]);
-
-  useEffect(() => {
-    doPlan();
-    return () => {
-      cancelled.current = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /* ---- apply a progress event to state ---- */
-  const applyProgress = useCallback(
-    (
-      courseId: number,
-      cmid: number,
-      status: ActivityStatus,
-      detail?: string,
-    ) => {
-      setCourses((prev) =>
-        prev.map((c) => {
-          if (c.id !== courseId) return c;
-          return {
-            ...c,
-            activities: c.activities.map((a) =>
-              a.cmid === cmid ? { ...a, status, detail } : a,
-            ),
-          };
-        }),
-      );
-    },
-    [],
-  );
-
-  const markCourseComplete = useCallback(
-    (courseId: number, summary?: RunSummary) => {
-      setCourses((prev) =>
-        prev.map((c) =>
-          c.id === courseId ? { ...c, complete: true, summary } : c,
-        ),
-      );
-    },
-    [],
-  );
-
-  /* ---- run sequentially ---- */
-  const runAll = useCallback(async () => {
-    for (const course of courses) {
-      if (cancelled.current) return;
-      setActiveCourseId(course.id);
-      setExpanded((prev) => new Set(prev).add(course.id));
-      pushLog(`Starting: ${course.fullname}`, "info");
-      try {
-        const res = await fetch("/api/run", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ courseId: course.id }),
-        });
-        if (res.status === 401) {
-          cancelled.current = true;
-          onSessionExpired();
-          return;
-        }
-        if (!res.ok || !res.body) {
-          markCourseComplete(course.id);
-          pushLog(`Could not start ${course.fullname}.`, "bad");
-          continue;
-        }
-        await readSSE(res, (event, dataStr) => {
-          if (cancelled.current) return;
-          let data: any = null;
-          try {
-            data = JSON.parse(dataStr);
-          } catch {
-            return;
-          }
-          if (event === "progress") {
-            const status: ActivityStatus = data.status;
-            applyProgress(
-              data.courseId ?? course.id,
-              data.cmid,
-              status,
-              data.detail,
-            );
-            const tone: LogLine["tone"] =
-              status === "failed"
-                ? "bad"
-                : status === "skipped"
-                  ? "warn"
-                  : "good";
-            const verb =
-              status === "done"
-                ? "Completed"
-                : status === "already"
-                  ? "Already done"
-                  : status === "skipped"
-                    ? "Skipped"
-                    : "Failed";
-            pushLog(`${verb}: ${data.name ?? "activity"}`, tone);
-          } else if (event === "done") {
-            markCourseComplete(
-              data.courseId ?? course.id,
-              data.summary as RunSummary,
-            );
-            pushLog(`Finished: ${course.fullname}`, "good");
-          } else if (event === "error") {
-            pushLog(
-              `${course.fullname}: ${data.message || "run error"}`,
-              "bad",
-            );
-          }
-        });
-      } catch {
-        markCourseComplete(course.id);
-        pushLog(`Error running ${course.fullname}.`, "bad");
-      }
-    }
-    if (!cancelled.current) {
-      setActiveCourseId(null);
-      setPhase("finished");
-    }
-  }, [courses, applyProgress, markCourseComplete, pushLog, onSessionExpired]);
-
-  // Kick off the run once we have a plan.
-  const startedRef = useRef(false);
-  useEffect(() => {
-    if (phase === "running" && courses.length && !startedRef.current) {
-      startedRef.current = true;
-      runAll();
-    }
-  }, [phase, courses, runAll]);
-
-  /* ---- persist run to per-device history (namespaced by user) ---- */
-  const historySaved = useRef(false);
-  useEffect(() => {
-    if (phase !== "finished" || historySaved.current) return;
-    historySaved.current = true;
-    const at = new Date().toISOString();
-    const perCourse: HistoryCourse[] = courses.map((c) => {
-      const total = c.activities.length;
-      const count = (s: ActivityStatus) =>
-        c.activities.filter((a) => a.status === s).length;
-      const done = count("done");
-      const already = count("already");
-      const skipped = count("skipped");
-      const failed = count("failed");
-      const handled = done + already + skipped + failed;
-      return {
-        id: c.id,
-        fullname: c.fullname,
-        done,
-        already,
-        skipped,
-        failed,
-        total,
-        pct: total === 0 ? 0 : Math.round((handled / total) * 100),
-        failures: c.activities
-          .filter((a) => a.status === "failed")
-          .map((a) => ({ name: a.name, detail: a.detail })),
-      };
-    });
-    saveHistoryRecord(email, { at, mode: runMode.mode, courses: perCourse });
-    try {
-      localStorage.setItem(
-        LAST_RUN_KEY,
-        JSON.stringify({ at, ...totals }),
-      );
-    } catch {
-      /* ignore */
-    }
-  }, [phase, courses, totals, email, runMode.mode]);
-
-  const toggleExpand = (id: number) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const pct =
-    totals.total === 0
-      ? 0
-      : Math.round((totals.handled / totals.total) * 100);
+  const onDone = () => setScreen("choose");
 
   /* ---- planning / error states ---- */
   if (phase === "planning") {
@@ -1289,7 +817,7 @@ function RunScreen({
               <button className="btn btn-ghost" onClick={onDone}>
                 Back
               </button>
-              <button className="btn btn-primary" onClick={doPlan}>
+              <button className="btn btn-primary" onClick={retryPlan}>
                 Retry
               </button>
             </div>

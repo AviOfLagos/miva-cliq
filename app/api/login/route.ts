@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { login, LoginError } from "@/lib/moodle/auth";
 import { seal, SESSION_COOKIE } from "@/lib/session";
+import { recordUser } from "@/lib/store/metrics";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -23,6 +24,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const session = await login(email, password);
+    // Counts this person once, ever, via a salted hash. Awaited so the write
+    // isn't cut off when the function freezes after the response.
+    await recordUser(email);
     const res = NextResponse.json({
       ok: true,
       name: session.name,

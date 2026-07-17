@@ -3,7 +3,9 @@ import { unseal, SESSION_COOKIE } from "@/lib/session";
 import { runCourse } from "@/lib/completion/engine";
 
 export const runtime = "nodejs";
-export const maxDuration = 300; // long-running; one course per request keeps it bounded
+// One course per request keeps each invocation bounded. 60s is the Vercel free-tier
+// cap; very large courses may need chunking or parallel marking (see README).
+export const maxDuration = 60;
 
 /**
  * Server-Sent-Events stream for a single course. The client loops its selected

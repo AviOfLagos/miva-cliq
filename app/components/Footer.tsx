@@ -47,7 +47,6 @@ export default function Footer() {
         </div>
       ) : null}
       <nav className="footer-links" aria-label="Legal and info">
-        <Link href="/how-it-works">How it works</Link>
         <Link href="/terms">Terms</Link>
         <Link href="/privacy">Privacy</Link>
         <Link href="/disclaimer">Disclaimer</Link>

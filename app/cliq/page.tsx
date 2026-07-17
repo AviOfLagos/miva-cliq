@@ -321,7 +321,12 @@ function ChooseScreen() {
         <h2 id="choose-title" className="greeting">
           Hi, {name} <span aria-hidden="true">👋</span>
         </h2>
-        <p className="subtle">What would you like to run today?</p>
+        <p className="subtle">
+          What would you like to run today?{" "}
+          <Link className="miva-link" href="/how-it-works">
+            How it works
+          </Link>
+        </p>
       </div>
 
       <div className="choose-grid">

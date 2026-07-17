@@ -22,6 +22,7 @@ export interface PlannedActivity {
   modname: string;
   action: ActionKind;
   state: number | null;
+  url: string | null; // direct Moodle link, for deep-linking into the LMS
 }
 
 export interface ProgressEvent {
@@ -61,6 +62,7 @@ export async function plan(
     modname: a.modname,
     action: planActivity(a),
     state: a.completionstate,
+    url: a.url,
   }));
 }
 

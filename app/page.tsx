@@ -43,12 +43,14 @@ type PlanActivity = {
   modname: string;
   action: Action;
   state: ActivityState;
+  url: string | null;
 };
 
 type ActivityStatus = "pending" | "done" | "skipped" | "failed" | "already";
 
 type RunActivity = PlanActivity & {
   status: ActivityStatus;
+  detail?: string; // reason, esp. for failures (e.g. "forum needs a reply")
 };
 
 type PlanCourse = {
@@ -88,6 +90,85 @@ type LogLine = {
 /* ------------------------------------------------------------------ */
 
 const LAST_RUN_KEY = "miva-cliq-last";
+const HISTORY_PREFIX = "miva-cliq-history:";
+const LMS_BASE = "https://lms.miva.university";
+
+/** Deep-link to a course on the Miva LMS (opens the real dashboard). */
+function mivaCourseUrl(courseId: number): string {
+  return `${LMS_BASE}/course/view.php?id=${courseId}`;
+}
+
+/* ---- per-device run history (localStorage, namespaced by user email) ---- */
+
+type HistoryCourse = {
+  id: number;
+  fullname: string;
+  done: number;
+  already: number;
+  skipped: number;
+  failed: number;
+  total: number;
+  pct: number;
+  failures: { name: string; detail?: string }[];
+};
+
+type HistoryRecord = {
+  at: string; // ISO timestamp
+  mode: "preset" | "custom";
+  courses: HistoryCourse[];
+};
+
+function historyKey(email: string): string {
+  return HISTORY_PREFIX + (email || "anon").toLowerCase();
+}
+
+function loadHistory(email: string): HistoryRecord[] {
+  try {
+    const raw = localStorage.getItem(historyKey(email));
+    const arr = raw ? (JSON.parse(raw) as HistoryRecord[]) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistoryRecord(email: string, record: HistoryRecord): void {
+  try {
+    const list = loadHistory(email);
+    list.unshift(record);
+    localStorage.setItem(historyKey(email), JSON.stringify(list.slice(0, 25)));
+  } catch {
+    /* ignore quota / privacy mode */
+  }
+}
+
+/** Latest result per course across all runs (for the "your courses" view). */
+function latestPerCourse(history: HistoryRecord[]): {
+  course: HistoryCourse;
+  at: string;
+}[] {
+  const seen = new Map<number, { course: HistoryCourse; at: string }>();
+  for (const rec of history) {
+    for (const c of rec.courses) {
+      if (!seen.has(c.id)) seen.set(c.id, { course: c, at: rec.at });
+    }
+  }
+  return Array.from(seen.values());
+}
+
+function timeAgo(iso: string): string {
+  try {
+    const then = new Date(iso).getTime();
+    const mins = Math.round((Date.now() - then) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.round(hrs / 24)}d ago`;
+  } catch {
+    return "";
+  }
+}
 
 const ACTION_META: Record<Action, { label: string; icon: string }> = {
   mark: { label: "Complete", icon: "✓" },
@@ -162,6 +243,7 @@ async function readSSE(
 export default function Page() {
   const [screen, setScreen] = useState<Screen>("login");
   const [name, setName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
   const [runMode, setRunMode] = useState<RunMode | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
 
@@ -202,9 +284,10 @@ export default function Page() {
         {screen === "login" && (
           <LoginScreen
             notice={authNotice}
-            onSuccess={(n) => {
+            onSuccess={(n, mail) => {
               setAuthNotice(null);
               setName(n);
+              setEmail(mail);
               setScreen("choose");
             }}
           />
@@ -213,6 +296,7 @@ export default function Page() {
         {screen === "choose" && (
           <ChooseScreen
             name={name}
+            email={email}
             onCustom={() => setScreen("custom")}
             onRunPreset={(presetId) => {
               setRunMode({ mode: "preset", presetId });
@@ -235,6 +319,7 @@ export default function Page() {
         {screen === "run" && runMode && (
           <RunScreen
             runMode={runMode}
+            email={email}
             onSessionExpired={onSessionExpired}
             onDone={() => setScreen("choose")}
           />
@@ -258,7 +343,7 @@ function LoginScreen({
   onSuccess,
   notice,
 }: {
-  onSuccess: (name: string) => void;
+  onSuccess: (name: string, email: string) => void;
   notice?: string | null;
 }) {
   const [email, setEmail] = useState("");
@@ -286,7 +371,7 @@ function LoginScreen({
         /* ignore parse errors */
       }
       if (res.ok && data?.ok) {
-        onSuccess(data.name || email.split("@")[0] || "there");
+        onSuccess(data.name || email.split("@")[0] || "there", email.trim());
       } else {
         setError(data?.error || "We couldn't log you in. Check your details and try again.");
       }
@@ -399,10 +484,12 @@ function LoginScreen({
 
 function ChooseScreen({
   name,
+  email,
   onCustom,
   onRunPreset,
 }: {
   name: string;
+  email: string;
   onCustom: () => void;
   onRunPreset: (presetId: string) => void;
 }) {
@@ -410,6 +497,13 @@ function ChooseScreen({
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [history, setHistory] = useState<HistoryRecord[]>([]);
+
+  useEffect(() => {
+    setHistory(loadHistory(email));
+  }, [email]);
+
+  const recentCourses = useMemo(() => latestPerCourse(history), [history]);
 
   const loadPresets = useCallback(async () => {
     setError(null);
@@ -517,6 +611,53 @@ function ChooseScreen({
           <button className="btn btn-ghost btn-sm" onClick={loadPresets}>
             Retry
           </button>
+        </div>
+      )}
+
+      {recentCourses.length > 0 && (
+        <div className="history">
+          <div className="history-head">
+            <h3 className="history-title">Your courses</h3>
+            <span className="subtle">
+              Saved on this device · tap a course to open it in Miva
+            </span>
+          </div>
+          <div className="history-grid">
+            {recentCourses.map(({ course, at }) => {
+              const completed = course.done + course.already;
+              return (
+                <a
+                  key={course.id}
+                  className="history-card"
+                  href={mivaCourseUrl(course.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={`Open ${course.fullname} in Miva`}
+                >
+                  <div className="history-card-top">
+                    <span className="history-course">{course.fullname}</span>
+                    <span className="ext" aria-hidden="true">
+                      ↗
+                    </span>
+                  </div>
+                  <div className="progress-track" aria-hidden="true">
+                    <div
+                      className="progress-fill fill-done"
+                      style={{ width: `${course.pct}%` }}
+                    />
+                  </div>
+                  <div className="history-card-foot">
+                    <span className="history-pct">{course.pct}%</span>
+                    <span className="subtle">
+                      {completed}/{course.total} done
+                      {course.failed ? ` · ${course.failed} failed` : ""}
+                    </span>
+                    <span className="subtle history-when">{timeAgo(at)}</span>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -832,10 +973,12 @@ function CustomScreen({
 
 function RunScreen({
   runMode,
+  email,
   onDone,
   onSessionExpired,
 }: {
   runMode: RunMode;
+  email: string;
   onDone: () => void;
   onSessionExpired: (msg?: string) => void;
 }) {
@@ -946,14 +1089,19 @@ function RunScreen({
 
   /* ---- apply a progress event to state ---- */
   const applyProgress = useCallback(
-    (courseId: number, cmid: number, status: ActivityStatus) => {
+    (
+      courseId: number,
+      cmid: number,
+      status: ActivityStatus,
+      detail?: string,
+    ) => {
       setCourses((prev) =>
         prev.map((c) => {
           if (c.id !== courseId) return c;
           return {
             ...c,
             activities: c.activities.map((a) =>
-              a.cmid === cmid ? { ...a, status } : a,
+              a.cmid === cmid ? { ...a, status, detail } : a,
             ),
           };
         }),
@@ -1007,7 +1155,12 @@ function RunScreen({
           }
           if (event === "progress") {
             const status: ActivityStatus = data.status;
-            applyProgress(data.courseId ?? course.id, data.cmid, status);
+            applyProgress(
+              data.courseId ?? course.id,
+              data.cmid,
+              status,
+              data.detail,
+            );
             const tone: LogLine["tone"] =
               status === "failed"
                 ? "bad"
@@ -1056,25 +1209,45 @@ function RunScreen({
     }
   }, [phase, courses, runAll]);
 
-  /* ---- persist last-run summary ---- */
+  /* ---- persist run to per-device history (namespaced by user) ---- */
+  const historySaved = useRef(false);
   useEffect(() => {
-    if (phase !== "finished") return;
+    if (phase !== "finished" || historySaved.current) return;
+    historySaved.current = true;
+    const at = new Date().toISOString();
+    const perCourse: HistoryCourse[] = courses.map((c) => {
+      const total = c.activities.length;
+      const count = (s: ActivityStatus) =>
+        c.activities.filter((a) => a.status === s).length;
+      const done = count("done");
+      const already = count("already");
+      const skipped = count("skipped");
+      const failed = count("failed");
+      const handled = done + already + skipped + failed;
+      return {
+        id: c.id,
+        fullname: c.fullname,
+        done,
+        already,
+        skipped,
+        failed,
+        total,
+        pct: total === 0 ? 0 : Math.round((handled / total) * 100),
+        failures: c.activities
+          .filter((a) => a.status === "failed")
+          .map((a) => ({ name: a.name, detail: a.detail })),
+      };
+    });
+    saveHistoryRecord(email, { at, mode: runMode.mode, courses: perCourse });
     try {
       localStorage.setItem(
         LAST_RUN_KEY,
-        JSON.stringify({
-          at: new Date().toISOString(),
-          done: totals.done,
-          already: totals.already,
-          skipped: totals.skipped,
-          failed: totals.failed,
-          total: totals.total,
-        }),
+        JSON.stringify({ at, ...totals }),
       );
     } catch {
-      /* ignore quota / privacy mode */
+      /* ignore */
     }
-  }, [phase, totals]);
+  }, [phase, courses, totals, email, runMode.mode]);
 
   const toggleExpand = (id: number) =>
     setExpanded((prev) => {
@@ -1129,7 +1302,12 @@ function RunScreen({
   const failures = courses.flatMap((c) =>
     c.activities
       .filter((a) => a.status === "failed")
-      .map((a) => ({ course: c.fullname, activity: a.name })),
+      .map((a) => ({
+        course: c.fullname,
+        activity: a.name,
+        detail: a.detail,
+        url: a.url,
+      })),
   );
 
   return (
@@ -1218,32 +1396,43 @@ function RunScreen({
                 c.complete ? "is-complete" : ""
               }`}
             >
-              <button
-                type="button"
-                className="course-row-head"
-                onClick={() => toggleExpand(c.id)}
-                aria-expanded={isOpen}
-              >
-                <span className={`chevron ${isOpen ? "open" : ""}`} aria-hidden="true">
-                  ▸
-                </span>
-                <span className="course-row-title">{c.fullname}</span>
-                <span className="course-row-meta">
-                  {c.complete ? (
-                    <span className="tag tag-done">Done</span>
-                  ) : isActive ? (
-                    <span className="tag tag-active">
-                      <span className="spinner spinner-sm" aria-hidden="true" />
-                      Running
-                    </span>
-                  ) : (
-                    <span className="tag">Queued</span>
-                  )}
-                  <span className="count-badge">
-                    {handled}/{total}
+              <div className="course-row-bar">
+                <button
+                  type="button"
+                  className="course-row-head"
+                  onClick={() => toggleExpand(c.id)}
+                  aria-expanded={isOpen}
+                >
+                  <span className={`chevron ${isOpen ? "open" : ""}`} aria-hidden="true">
+                    ▸
                   </span>
-                </span>
-              </button>
+                  <span className="course-row-title">{c.fullname}</span>
+                  <span className="course-row-meta">
+                    {c.complete ? (
+                      <span className="tag tag-done">Done</span>
+                    ) : isActive ? (
+                      <span className="tag tag-active">
+                        <span className="spinner spinner-sm" aria-hidden="true" />
+                        Running
+                      </span>
+                    ) : (
+                      <span className="tag">Queued</span>
+                    )}
+                    <span className="count-badge">
+                      {handled}/{total}
+                    </span>
+                  </span>
+                </button>
+                <a
+                  className="miva-link"
+                  href={mivaCourseUrl(c.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={`Open ${c.fullname} in Miva`}
+                >
+                  Miva <span aria-hidden="true">↗</span>
+                </a>
+              </div>
 
               <div className="progress-track" aria-hidden="true">
                 <div
@@ -1265,7 +1454,19 @@ function RunScreen({
                           <span className={`status-dot ${s.cls}`} aria-hidden="true">
                             {s.icon}
                           </span>
-                          <span className="activity-name">{a.name}</span>
+                          {a.url ? (
+                            <a
+                              className="activity-name activity-link"
+                              href={a.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Open "${a.name}" in Miva`}
+                            >
+                              {a.name} <span className="ext" aria-hidden="true">↗</span>
+                            </a>
+                          ) : (
+                            <span className="activity-name">{a.name}</span>
+                          )}
                           <span className="activity-tags">
                             <span className="mini-tag" title={meta.label}>
                               {meta.icon} {meta.label}
@@ -1328,8 +1529,25 @@ function RunScreen({
                       ✕
                     </span>
                     <span>
-                      <strong>{f.activity}</strong>
+                      {f.url ? (
+                        <a
+                          className="activity-link"
+                          href={f.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <strong>{f.activity}</strong>{" "}
+                          <span className="ext" aria-hidden="true">
+                            ↗
+                          </span>
+                        </a>
+                      ) : (
+                        <strong>{f.activity}</strong>
+                      )}
                       <span className="subtle"> — {f.course}</span>
+                      {f.detail ? (
+                        <span className="fail-reason">{f.detail}</span>
+                      ) : null}
                     </span>
                   </li>
                 ))}

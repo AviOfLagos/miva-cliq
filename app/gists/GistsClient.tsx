@@ -184,7 +184,7 @@ function LoginPrompt() {
           What we store
         </Link>
       </p>
-      <Link className="btn btn-primary btn-sm" href="/">
+      <Link className="btn btn-primary btn-sm" href="/cliq">
         Log in to post
       </Link>
     </div>

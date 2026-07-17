@@ -2463,3 +2463,50 @@ input:disabled {
     grid-column: 1 / -1;
   }
 }
+
+/* login consent checkbox (clickwrap) */
+.consent-check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 10px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.consent-check input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.consent-box {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface-2);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  margin-top: 1px;
+}
+
+.consent-check input:checked + .consent-box {
+  background: var(--grad);
+  border-color: transparent;
+}
+
+.consent-check input:focus-visible + .consent-box {
+  box-shadow: var(--ring-focus);
+}
+
+.consent-text {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}

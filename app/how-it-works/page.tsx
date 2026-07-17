@@ -141,7 +141,7 @@ export default function HowItWorksPage() {
       </div>
 
       <div className="doc-foot">
-        <Link className="btn btn-primary" href="/">
+        <Link className="btn btn-primary" href="/cliq">
           Get started <span aria-hidden="true">→</span>
         </Link>
       </div>

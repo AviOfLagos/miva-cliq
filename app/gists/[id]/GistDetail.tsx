@@ -192,7 +192,7 @@ export default function GistDetail({ initialGist }: { initialGist: Gist }) {
           />
         ) : (
           <p className="subtle">
-            <Link className="miva-link" href="/">
+            <Link className="miva-link" href="/cliq">
               Log in
             </Link>{" "}
             to reply.

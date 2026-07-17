@@ -160,7 +160,7 @@ export default function EventDetail({ initialEvent }: { initialEvent: MivaEvent 
 
       {!name && (
         <p className="subtle">
-          <Link className="miva-link" href="/">
+          <Link className="miva-link" href="/cliq">
             Log in
           </Link>{" "}
           to post your own event.

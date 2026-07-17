@@ -33,6 +33,20 @@ export async function recordRun(): Promise<void> {
   }
 }
 
+/** Aggregate count of terms acceptances (one per login where consent is given). */
+export async function recordConsent(): Promise<void> {
+  const sql = getDb();
+  if (!sql) return;
+  try {
+    await sql`
+      INSERT INTO metric_counters (name, value) VALUES ('consents', 1)
+      ON CONFLICT (name) DO UPDATE SET value = metric_counters.value + 1
+    `;
+  } catch {
+    /* never break a login */
+  }
+}
+
 export async function readMetrics(): Promise<{ users: number; runs: number }> {
   const sql = getDb();
   if (!sql) return { users: 0, runs: 0 };

@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useApp } from "@/lib/run/AppContext";
 
 const NAV = [
-  { href: "/gists", label: "Gists" },
+  { href: "/", label: "Gists" },
+  { href: "/cliq", label: "Cliq" },
   { href: "/events", label: "Events" },
   { href: "/how-it-works", label: "How it works" },
 ];
@@ -16,10 +17,10 @@ export default function TopBar() {
   const router = useRouter();
 
   // The run keeps going while the user browses other pages; this jumps back to
-  // the full log.
+  // the full log on the Cliq tab.
   const openRun = () => {
     setScreen("run");
-    if (pathname !== "/") router.push("/");
+    if (pathname !== "/cliq") router.push("/cliq");
   };
 
   return (
@@ -46,7 +47,7 @@ export default function TopBar() {
       </div>
 
       <div className="topbar-right">
-        {isRunning && !(pathname === "/" && screen === "run") ? (
+        {isRunning && !(pathname === "/cliq" && screen === "run") ? (
           <button
             type="button"
             className="run-pill"

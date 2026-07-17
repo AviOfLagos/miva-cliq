@@ -106,7 +106,7 @@ export default function EventsClient() {
             <p className="doc-body">
               Log in to post an event. Posts are anonymous.
             </p>
-            <Link className="btn btn-primary btn-sm" href="/">
+            <Link className="btn btn-primary btn-sm" href="/cliq">
               Log in
             </Link>
           </div>

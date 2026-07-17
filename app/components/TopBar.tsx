@@ -6,7 +6,6 @@ import { useApp } from "@/lib/run/AppContext";
 
 const NAV = [
   { href: "/", label: "Gists" },
-  { href: "/cliq", label: "Autopilot" },
   { href: "/events", label: "Events" },
 ];
 
@@ -73,6 +72,17 @@ export default function TopBar() {
             <span className="topbar-name">{name}</span>
           </div>
         ) : null}
+
+        <Link
+          href="/cliq"
+          className={`nav-cta ${pathname === "/cliq" ? "is-current" : ""}`}
+          aria-current={pathname === "/cliq" ? "page" : undefined}
+        >
+          <span className="nav-cta-icon" aria-hidden="true">
+            ⚡
+          </span>
+          <span className="nav-cta-label">Autopilot</span>
+        </Link>
       </div>
     </header>
   );

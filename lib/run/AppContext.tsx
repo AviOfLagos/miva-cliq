@@ -72,6 +72,11 @@ type AppValue = {
   /* forum reply preferences */
   forumTexts: string[];
   setForumTexts: (texts: string[]) => void;
+  /* community identity (Gists/Events) */
+  authed: boolean; // has a valid Miva session cookie (can post)
+  username: string | null; // chosen handle, null = none yet
+  setUsername: (u: string | null) => void;
+  refreshMe: () => void;
 };
 
 const Ctx = createContext<AppValue | null>(null);
@@ -88,6 +93,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState("");
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [screen, setScreen] = useState<Screen>("login");
+
+  /* ---- community identity (independent of the /cliq login screen) ---- */
+  const [authed, setAuthed] = useState(false);
+  const [username, setUsernameState] = useState<string | null>(null);
+  // Ask the server who we are: 200 => logged in (cookie valid), body carries the
+  // handle (or null). 401 => not logged in. Runs on mount so a direct visit to
+  // /gists still knows the viewer's state without going through /cliq.
+  const refreshMe = useCallback(() => {
+    fetch("/api/me", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d === "object") {
+          setAuthed(true);
+          setUsernameState(d.username ?? null);
+        } else {
+          setAuthed(false);
+          setUsernameState(null);
+        }
+      })
+      .catch(() => {
+        /* leave state as-is on a network blip */
+      });
+  }, []);
+  const setUsername = useCallback((u: string | null) => setUsernameState(u), []);
 
   /* ---- forum reply messages (per-device, loaded once we know the user) ---- */
   const [forumTexts, setForumTextsState] = useState<string[]>(DEFAULT_FORUM_TEXTS);
@@ -129,21 +158,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const signIn = useCallback((n: string, mail: string) => {
-    setAuthNotice(null);
-    setName(n);
-    setEmail(mail);
-    const texts = loadForumTexts(mail);
-    setForumTextsState(texts);
-    forumTextsRef.current = texts;
-    setScreen("choose");
-  }, []);
+  const signIn = useCallback(
+    (n: string, mail: string) => {
+      setAuthNotice(null);
+      setName(n);
+      setEmail(mail);
+      const texts = loadForumTexts(mail);
+      setForumTextsState(texts);
+      forumTextsRef.current = texts;
+      setScreen("choose");
+      // Just authenticated — pull the community handle (usually null at first).
+      refreshMe();
+    },
+    [refreshMe],
+  );
+
+  // Learn the viewer's community identity on first mount (cookie may already
+  // exist from a prior /cliq login).
+  useEffect(() => {
+    refreshMe();
+  }, [refreshMe]);
 
   // Called by any request that returns 401 (session lapsed/missing).
   const onSessionExpired = useCallback((msg?: string) => {
     runToken.current += 1; // stop any in-flight run
     setName("");
     setRunMode(null);
+    setAuthed(false);
+    setUsernameState(null);
     setAuthNotice(msg || "Your session expired. Please log in again.");
     setScreen("login");
   }, []);
@@ -460,6 +502,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleExpand,
     forumTexts,
     setForumTexts,
+    authed,
+    username,
+    setUsername,
+    refreshMe,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

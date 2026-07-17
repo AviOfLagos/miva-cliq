@@ -3,7 +3,22 @@
 -- Anonymity note: author_hash is an HMAC of the Moodle userId under a server-only
 -- salt (see lib/store/authorHash.ts). It exists so we can rate-limit and clean up
 -- after an abuser. It is never returned by any API and cannot be reversed into an
--- identity. No email address is stored anywhere in this database.
+-- identity. No email address or password is stored anywhere in this database.
+--
+-- The one profile we keep is `users`: a chosen handle bound to that same hash.
+-- It's the only place a person is "remembered" — and only if they pick a handle.
+
+-- A user-chosen display handle, keyed on the same internal author_hash used for
+-- posting. This is the whole "account": no password, no email, no signup — the
+-- Moodle login (mc_session cookie) is the only credential. A person only gets a
+-- row here if they choose to post under a name or reply.
+CREATE TABLE IF NOT EXISTS users (
+  author_hash     TEXT PRIMARY KEY,
+  username        TEXT        NOT NULL,
+  username_lower  TEXT        NOT NULL UNIQUE,   -- case-insensitive uniqueness
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 CREATE TABLE IF NOT EXISTS gists (
   id           TEXT PRIMARY KEY,
@@ -22,6 +37,9 @@ CREATE TABLE IF NOT EXISTS gists (
 -- category and/or department. A partial index keeps hidden rows out of the scan.
 -- Added after launch; ADD COLUMN IF NOT EXISTS keeps this migration idempotent.
 ALTER TABLE gists ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+-- show_author: reveal the poster's handle on this gist? Default false = anonymous.
+-- The handle is resolved live from `users` at read time, so a rename propagates.
+ALTER TABLE gists ADD COLUMN IF NOT EXISTS show_author BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS gists_feed_idx
   ON gists (created_at DESC) WHERE NOT hidden;
@@ -57,6 +75,7 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 ALTER TABLE events ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS show_author BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Events sort by when they happen, not when they were posted.
 CREATE INDEX IF NOT EXISTS events_upcoming_idx

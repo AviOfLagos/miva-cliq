@@ -6,6 +6,7 @@ import { useApp } from "@/lib/run/AppContext";
 
 const NAV = [
   { href: "/gists", label: "Gists" },
+  { href: "/events", label: "Events" },
   { href: "/how-it-works", label: "How it works" },
 ];
 

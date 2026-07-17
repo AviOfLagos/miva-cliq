@@ -11,7 +11,8 @@ const siteUrl =
     : "http://localhost:3000");
 
 const title = "Miva Cliq";
-const description = "Auto-complete your Miva coursework in minutes, not hours.";
+const description =
+  "Auto-complete your Miva coursework in minutes, not hours. Plus Miva Gists and Events — an anonymous board where students share news and meetups.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -25,6 +26,9 @@ export const metadata: Metadata = {
     "coursework",
     "LMS",
     "auto-complete",
+    "Miva Gists",
+    "Miva Events",
+    "student forum",
   ],
   openGraph: {
     type: "website",

@@ -26,48 +26,57 @@ async function discussionIds(
   return [...new Set(ids)];
 }
 
-/** Find a replyable root post for a discussion. */
-async function rootPost(
-  session: MoodleSession,
-  discussionId: number,
-): Promise<{ postId: number; subject: string } | null> {
-  const res = await ajax(session, "mod_forum_get_discussion_posts", {
-    discussionid: discussionId,
-  });
-  if (res.error) return null;
-  const posts = (res.data?.posts || []) as any[];
-  if (!posts.length) return null;
-  // Root = the post with no parent; fall back to the lowest id (oldest).
-  const root =
-    posts.find((p) => p.parentid === null || p.parentid === 0) ||
-    posts.reduce((a, b) => (a.id < b.id ? a : b));
-  // Respect Moodle's own capability flag when present.
-  if (root.capabilities && root.capabilities.reply === false) return null;
-  return { postId: Number(root.id), subject: root.subject || "" };
-}
+export type ReplyResult = "posted" | "already-posted" | "failed";
+
+/** Cap how many discussions we'll inspect on a busy forum. */
+const MAX_DISCUSSIONS = 8;
 
 /**
  * Post a reply into a forum so it registers as complete.
- * Returns true if the reply was accepted by Moodle.
+ *
+ * - "posted"         a reply was accepted by Moodle.
+ * - "already-posted" the user already has a reply in this forum, so we DON'T
+ *                    post again (avoids duplicate replies on re-runs).
+ * - "failed"         no discussion could be replied to (e.g. Announcements, or
+ *                    a forum that requires starting a new topic — which the API
+ *                    blocks).
  */
 export async function replyToForum(
   session: MoodleSession,
   forumUrl: string,
   message: string,
-): Promise<boolean> {
-  const discussions = await discussionIds(session, forumUrl);
+): Promise<ReplyResult> {
+  const discussions = (await discussionIds(session, forumUrl)).slice(
+    0,
+    MAX_DISCUSSIONS,
+  );
   for (const d of discussions) {
-    const root = await rootPost(session, d);
-    if (!root) continue;
+    const res = await ajax(session, "mod_forum_get_discussion_posts", {
+      discussionid: d,
+    });
+    if (res.error) continue;
+    const posts = (res.data?.posts || []) as any[];
+    if (!posts.length) continue;
+
+    // Never double-post: if we already replied in this discussion, stop.
+    if (posts.some((p) => Number(p.author?.id) === session.userId)) {
+      return "already-posted";
+    }
+
+    const root =
+      posts.find((p) => p.parentid === null || p.parentid === 0) ||
+      posts.reduce((a, b) => (a.id < b.id ? a : b));
+    if (root.capabilities && root.capabilities.reply === false) continue;
+
     const subject = root.subject ? `Re: ${root.subject}` : "Reply";
-    const res = await ajax(session, "mod_forum_add_discussion_post", {
-      postid: root.postId,
+    const r = await ajax(session, "mod_forum_add_discussion_post", {
+      postid: Number(root.id),
       subject,
       message,
       messageformat: 1, // HTML
     });
-    if (!res.error && (res.data?.postid || res.data?.post)) return true;
-    // If this discussion rejected the reply, try the next one.
+    if (!r.error && (r.data?.postid || r.data?.post)) return "posted";
+    // Otherwise try the next discussion.
   }
-  return false;
+  return "failed";
 }

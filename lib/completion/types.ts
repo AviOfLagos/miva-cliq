@@ -26,8 +26,11 @@ export interface StrategyContext {
   verify(cmid: number): Promise<number | null>;
   /** User-supplied forum reply messages; one is picked at random per forum. */
   forumTexts: string[];
-  /** Post a reply into a forum (returns true if Moodle accepted it). */
-  replyToForum(forumUrl: string, message: string): Promise<boolean>;
+  /** Post a reply into a forum. See ReplyResult for the outcomes. */
+  replyToForum(
+    forumUrl: string,
+    message: string,
+  ): Promise<"posted" | "already-posted" | "failed">;
 }
 
 /** Options threaded from the request into the engine and strategy context. */

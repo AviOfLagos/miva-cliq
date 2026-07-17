@@ -28,14 +28,26 @@ export const forumReply: Strategy = {
     // 2. post a reply, if the user gave us texts to use
     if (a.url && ctx.forumTexts.length > 0) {
       const text = ctx.forumTexts[Math.floor(Math.random() * ctx.forumTexts.length)];
-      const posted = await ctx.replyToForum(a.url, text).catch(() => false);
-      if (posted && (await ctx.verify(a.cmid)) === 1) {
-        return { outcome: "done", detail: "posted a reply" };
-      }
-      if (posted) {
-        // Reply went through but completion didn't flip — surface honestly.
+      const result = await ctx.replyToForum(a.url, text).catch(
+        () => "failed" as const,
+      );
+
+      if (result === "posted") {
+        if ((await ctx.verify(a.cmid)) === 1) {
+          return { outcome: "done", detail: "posted a reply" };
+        }
         return { outcome: "failed", detail: "replied, but completion didn't register" };
       }
+
+      if (result === "already-posted") {
+        // Don't spam a second reply. Maybe it completed since; re-check.
+        if ((await ctx.verify(a.cmid)) === 1) return { outcome: "done" };
+        return {
+          outcome: "failed",
+          detail: "you've already replied here — completion may need something else",
+        };
+      }
+
       return {
         outcome: "failed",
         detail: "couldn't post a reply here (may be announcements-only)",

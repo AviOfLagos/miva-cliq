@@ -30,3 +30,10 @@ export function compactNumber(n: number): string {
   const m = n / 1_000_000;
   return `${m < 10 ? m.toFixed(1).replace(/\.0$/, "") : Math.round(m)}m`;
 }
+
+/** One-line snippet for social-card and meta descriptions. */
+export function snippet(text: string, max = 160): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  return clean.slice(0, max - 1).trimEnd() + "…";
+}

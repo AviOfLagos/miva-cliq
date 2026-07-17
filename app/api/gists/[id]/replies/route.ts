@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unseal, SESSION_COOKIE } from "@/lib/session";
 import { sessionAuthorHash } from "@/lib/store/authorHash";
-import { rateLimit, clientIp } from "@/lib/store/rateLimit";
-import { storeEnabled } from "@/lib/store/redis";
-import { addReply, listReplies, normalizeBody, MAX_BODY } from "@/lib/store/gists";
+import { rateLimit, recordRateEvent, clientIp } from "@/lib/store/rateLimit";
+import { storeEnabled } from "@/lib/store/db";
+import {
+  addReply,
+  listReplies,
+  ownedReplyIds,
+  normalizeBody,
+  MAX_BODY,
+} from "@/lib/store/gists";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,9 +20,14 @@ const HOUR = 3600;
 
 type Ctx = { params: { id: string } };
 
-export async function GET(_req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, { params }: Ctx) {
   const replies = await listReplies(params.id);
-  return NextResponse.json({ replies });
+  // Mark which replies belong to the viewer so the UI can show edit controls.
+  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
+  const mine = session
+    ? await ownedReplyIds(params.id, sessionAuthorHash(session))
+    : [];
+  return NextResponse.json({ replies, mine });
 }
 
 export async function POST(req: NextRequest, { params }: Ctx) {
@@ -31,15 +42,15 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     );
   }
 
-  let body: unknown;
+  let payload: any;
   try {
-    body = (await req.json())?.body;
+    payload = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const clean = normalizeBody(body);
-  if (!clean) {
+  const body = normalizeBody(payload?.body);
+  if (!body) {
     return NextResponse.json(
       { error: `Write something first (max ${MAX_BODY} characters).` },
       { status: 400 },
@@ -47,9 +58,10 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   const hash = sessionAuthorHash(session);
+  const ip = clientIp(req);
   const [byUser, byIp] = await Promise.all([
-    rateLimit(`rate:reply:${hash}`, REPLIES_PER_HOUR, HOUR),
-    rateLimit(`rate:replyip:${clientIp(req)}`, REPLIES_PER_HOUR_PER_IP, HOUR),
+    rateLimit(hash, "reply", REPLIES_PER_HOUR, HOUR),
+    rateLimit(`ip:${ip}`, "reply", REPLIES_PER_HOUR_PER_IP, HOUR),
   ]);
   if (!byUser.ok || !byIp.ok) {
     return NextResponse.json(
@@ -58,9 +70,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     );
   }
 
-  const reply = await addReply(params.id, clean, Date.now());
+  const reply = await addReply(params.id, body, hash);
   if (!reply) {
     return NextResponse.json({ error: "That gist is gone." }, { status: 404 });
   }
+  await Promise.all([
+    recordRateEvent(hash, "reply"),
+    recordRateEvent(`ip:${ip}`, "reply"),
+  ]);
   return NextResponse.json({ reply }, { status: 201 });
 }

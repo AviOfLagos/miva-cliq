@@ -41,6 +41,25 @@ function statusIcon(status: ActivityStatus): { icon: string; cls: string } {
   }
 }
 
+/** Group a failure's reason into a human bucket, for the summary breakdown. */
+function failureCategory(detail?: string): string {
+  const d = (detail || "").toLowerCase();
+  if (/forum|repl|announcement/.test(d)) return "Forums needing a reply";
+  if (/unhandled|unknown|new strategy/.test(d)) return "Unrecognised activities";
+  if (/confirm|register|stick/.test(d)) return "Didn't register";
+  return "Other";
+}
+
+const CATEGORY_HINT: Record<string, string> = {
+  "Forums needing a reply":
+    "Add forum reply messages on the previous screen to auto-complete these.",
+  "Unrecognised activities":
+    "A type we don't handle yet — open it in Miva and complete it there.",
+  "Didn't register":
+    "The action went through but Moodle didn't mark it complete; try re-running.",
+  Other: "Open these in Miva to finish them.",
+};
+
 /* ------------------------------------------------------------------ */
 /* Root component                                                     */
 /* ------------------------------------------------------------------ */
@@ -201,6 +220,21 @@ function LoginScreen() {
           <Link className="miva-link" href="/how-it-works">
             How it works
           </Link>
+        </p>
+        <p className="reassure legal-consent">
+          By logging in you agree to our{" "}
+          <Link className="miva-link" href="/terms">
+            Terms
+          </Link>
+          ,{" "}
+          <Link className="miva-link" href="/privacy">
+            Privacy Policy
+          </Link>
+          , and{" "}
+          <Link className="miva-link" href="/disclaimer">
+            Disclaimer
+          </Link>
+          . You use Miva Cliq at your own risk.
         </p>
       </div>
     </section>
@@ -838,6 +872,15 @@ function RunScreen() {
       })),
   );
 
+  // Group failures by reason so the biggest drag on the success rate is obvious.
+  const failureBreakdown = Object.entries(
+    failures.reduce<Record<string, number>>((acc, f) => {
+      const cat = failureCategory(f.detail);
+      acc[cat] = (acc[cat] || 0) + 1;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b[1] - a[1]);
+
   return (
     <section className="fade-in run-wrap">
       <div className="section-head run-head">
@@ -1050,6 +1093,21 @@ function RunScreen() {
           {failures.length > 0 && (
             <div className="failures">
               <h3 className="failures-title">Needs another look</h3>
+
+              {failureBreakdown.length > 0 && (
+                <ul className="fail-breakdown">
+                  {failureBreakdown.map(([cat, n]) => (
+                    <li key={cat} className="fail-cat">
+                      <span className="fail-cat-count">{n}</span>
+                      <span className="fail-cat-name">{cat}</span>
+                      <span className="fail-cat-hint subtle">
+                        {CATEGORY_HINT[cat]}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
               <ul className="failures-list">
                 {failures.map((f, i) => (
                   <li key={i}>

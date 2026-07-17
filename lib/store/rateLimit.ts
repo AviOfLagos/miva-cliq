@@ -1,28 +1,48 @@
 /**
- * Fixed-window rate limiting for anonymous posting.
+ * Sliding-window rate limiting, backed by a row per action.
  *
- * Deliberately simple: INCR a key, EXPIRE it on first write. A fixed window can
- * let through up to 2x the limit across a boundary, which is fine for spam
- * control on a student forum.
+ * Fails open: a database blip shouldn't stop people posting. Spam is a nuisance;
+ * a dead forum is worse.
  */
-import { getRedis } from "./redis";
+import { getDb } from "./db";
 
 export type RateVerdict = { ok: boolean; remaining: number };
 
 export async function rateLimit(
-  key: string,
+  actor: string,
+  kind: string,
   limit: number,
   windowSeconds: number,
 ): Promise<RateVerdict> {
-  const redis = getRedis();
-  if (!redis) return { ok: true, remaining: limit };
+  const sql = getDb();
+  if (!sql) return { ok: true, remaining: limit };
   try {
-    const count = await redis.incr(key);
-    if (count === 1) await redis.expire(key, windowSeconds);
-    return { ok: count <= limit, remaining: Math.max(0, limit - count) };
+    const rows = (await sql`
+      SELECT count(*)::int AS n
+        FROM rate_events
+       WHERE actor = ${actor}
+         AND kind = ${kind}
+         AND created_at > now() - make_interval(secs => ${windowSeconds})
+    `) as { n: number }[];
+    const used = rows[0]?.n ?? 0;
+    if (used >= limit) return { ok: false, remaining: 0 };
+    return { ok: true, remaining: limit - used - 1 };
   } catch {
-    // Fail open: a Redis blip shouldn't stop people posting.
     return { ok: true, remaining: limit };
+  }
+}
+
+/** Record an action against the limit. Call only once the action succeeded. */
+export async function recordRateEvent(actor: string, kind: string): Promise<void> {
+  const sql = getDb();
+  if (!sql) return;
+  try {
+    await sql`INSERT INTO rate_events (actor, kind) VALUES (${actor}, ${kind})`;
+    // Opportunistic prune so the table doesn't grow forever. Cheap: hits the
+    // same index the limit check uses.
+    await sql`DELETE FROM rate_events WHERE created_at < now() - interval '2 days'`;
+  } catch {
+    /* never break a post over bookkeeping */
   }
 }
 

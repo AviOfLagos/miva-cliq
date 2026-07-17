@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { compactNumber } from "@/lib/format";
 
 type Metrics = { users: number; runs: number };
@@ -45,6 +46,12 @@ export default function Footer() {
           {compactNumber(metrics.runs)} run{metrics.runs === 1 ? "" : "s"}
         </div>
       ) : null}
+      <nav className="footer-links" aria-label="Legal and info">
+        <Link href="/how-it-works">How it works</Link>
+        <Link href="/terms">Terms</Link>
+        <Link href="/privacy">Privacy</Link>
+        <Link href="/disclaimer">Disclaimer</Link>
+      </nav>
     </footer>
   );
 }

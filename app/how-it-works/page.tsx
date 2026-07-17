@@ -55,10 +55,12 @@ export default function HowItWorksPage() {
             marked them done.
           </li>
           <li>
-            <strong>Forums needing a real reply are reported, not faked.</strong>{" "}
-            If an activity needs you to actually post something, Miva Cliq tells
-            you it failed and links you to it. It doesn&apos;t write posts in
-            your name.
+            <strong>Forums post only your words, and only if you opt in.</strong>{" "}
+            Some forums only complete once you reply. If you add your own reply
+            messages, Miva Cliq posts one of them to those forums for you —
+            using text you wrote, as you, visible to your class. Leave that empty
+            and it posts nothing: those forums are simply reported so you can
+            reply yourself. It never invents words on your behalf.
           </li>
           <li>
             <strong>Unknown activity types surface in the report</strong> rather
@@ -129,8 +131,9 @@ export default function HowItWorksPage() {
         <p className="doc-body">
           Miva Cliq handles the box-ticking — the &ldquo;mark as read&rdquo;
           busywork that Moodle counts but nobody learns from. It does not take
-          your tests, write your assignments, or pretend to be you in a
-          discussion. If a thing is actually assessed, it stays yours.
+          your tests or write your assignments. It will post a forum reply, but
+          only your own words, and only if you switch that on. If a thing is
+          actually assessed, it stays yours.
         </p>
         <p className="doc-body">
           Your account, your call. The report tells you the truth either way.

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unseal, SESSION_COOKIE } from "@/lib/session";
 import { sessionAuthorHash } from "@/lib/store/authorHash";
-import { rateLimit, clientIp } from "@/lib/store/rateLimit";
-import { storeEnabled } from "@/lib/store/redis";
+import { rateLimit, recordRateEvent, clientIp } from "@/lib/store/rateLimit";
+import { storeEnabled } from "@/lib/store/db";
 import { createGist, listGists, normalizeBody, MAX_BODY } from "@/lib/store/gists";
+import { isCategory, isDepartment, DEFAULT_CATEGORY } from "@/lib/taxonomy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,11 +15,15 @@ const HOUR = 3600;
 
 /** Public feed. No auth — anyone can read Gists. */
 export async function GET(req: NextRequest) {
-  const beforeRaw = req.nextUrl.searchParams.get("before");
-  const before = beforeRaw ? Number(beforeRaw) : undefined;
-  const gists = await listGists(
-    Number.isFinite(before) && before! > 0 ? before : undefined,
-  );
+  const q = req.nextUrl.searchParams;
+  // Unknown slugs are ignored rather than 400'd — a stale bookmark should show
+  // the unfiltered feed, not an error.
+  const category = isCategory(q.get("category")) ? q.get("category") : null;
+  const department = isDepartment(q.get("department")) ? q.get("department") : null;
+  const beforeRaw = Number(q.get("before"));
+  const before = Number.isFinite(beforeRaw) && beforeRaw > 0 ? beforeRaw : null;
+
+  const gists = await listGists({ category, department, before });
   return NextResponse.json({
     gists,
     enabled: storeEnabled(),
@@ -30,10 +35,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) {
-    return NextResponse.json(
-      { error: "Log in to post a gist." },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: "Log in to post a gist." }, { status: 401 });
   }
   if (!storeEnabled()) {
     return NextResponse.json(
@@ -42,25 +44,30 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: unknown;
+  let payload: any;
   try {
-    body = (await req.json())?.body;
+    payload = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const clean = normalizeBody(body);
-  if (!clean) {
+  const body = normalizeBody(payload?.body);
+  if (!body) {
     return NextResponse.json(
       { error: `Write something first (max ${MAX_BODY} characters).` },
       { status: 400 },
     );
   }
 
+  const category = isCategory(payload?.category) ? payload.category : DEFAULT_CATEGORY;
+  // Department is optional by design — see the anonymity note in db/schema.sql.
+  const department = isDepartment(payload?.department) ? payload.department : null;
+
   const hash = sessionAuthorHash(session);
+  const ip = clientIp(req);
   const [byUser, byIp] = await Promise.all([
-    rateLimit(`rate:post:${hash}`, POSTS_PER_HOUR, HOUR),
-    rateLimit(`rate:ip:${clientIp(req)}`, POSTS_PER_HOUR_PER_IP, HOUR),
+    rateLimit(hash, "gist", POSTS_PER_HOUR, HOUR),
+    rateLimit(`ip:${ip}`, "gist", POSTS_PER_HOUR_PER_IP, HOUR),
   ]);
   if (!byUser.ok || !byIp.ok) {
     return NextResponse.json(
@@ -69,9 +76,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const gist = await createGist(clean, hash, Date.now());
+  const gist = await createGist({ body, category, department, authorHash: hash });
   if (!gist) {
     return NextResponse.json({ error: "Couldn't post that." }, { status: 503 });
   }
+  await Promise.all([
+    recordRateEvent(hash, "gist"),
+    recordRateEvent(`ip:${ip}`, "gist"),
+  ]);
   return NextResponse.json({ gist }, { status: 201 });
 }

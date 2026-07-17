@@ -9,3 +9,4 @@ out
 # typescript build info
 *.tsbuildinfo
 .vercel
+.env*

@@ -10,6 +10,7 @@ import {
   normalizeBody,
   MAX_BODY,
 } from "@/lib/store/gists";
+import { getUsername } from "@/lib/store/users";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +59,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   const hash = sessionAuthorHash(session);
+
+  // Replies are never anonymous — a handle is required to leave one.
+  const username = await getUsername(hash);
+  if (!username) {
+    return NextResponse.json({ error: "username_required" }, { status: 409 });
+  }
+
   const ip = clientIp(req);
   const [byUser, byIp] = await Promise.all([
     rateLimit(hash, "reply", REPLIES_PER_HOUR, HOUR),
@@ -70,7 +78,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     );
   }
 
-  const reply = await addReply(params.id, body, hash);
+  const reply = await addReply(params.id, body, hash, username);
   if (!reply) {
     return NextResponse.json({ error: "That gist is gone." }, { status: 404 });
   }

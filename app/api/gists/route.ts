@@ -4,6 +4,7 @@ import { sessionAuthorHash } from "@/lib/store/authorHash";
 import { rateLimit, recordRateEvent, clientIp } from "@/lib/store/rateLimit";
 import { storeEnabled } from "@/lib/store/db";
 import { createGist, listGists, normalizeBody, MAX_BODY } from "@/lib/store/gists";
+import { getUsername } from "@/lib/store/users";
 import { isCategory, isDepartment, DEFAULT_CATEGORY } from "@/lib/taxonomy";
 
 export const runtime = "nodejs";
@@ -64,6 +65,17 @@ export async function POST(req: NextRequest) {
   const department = isDepartment(payload?.department) ? payload.department : null;
 
   const hash = sessionAuthorHash(session);
+
+  // Posting under your name needs a handle. Anonymous posts don't.
+  const showAuthor = payload?.showAuthor === true;
+  const username = showAuthor ? await getUsername(hash) : null;
+  if (showAuthor && !username) {
+    return NextResponse.json(
+      { error: "username_required" },
+      { status: 409 },
+    );
+  }
+
   const ip = clientIp(req);
   const [byUser, byIp] = await Promise.all([
     rateLimit(hash, "gist", POSTS_PER_HOUR, HOUR),
@@ -76,7 +88,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const gist = await createGist({ body, category, department, authorHash: hash });
+  const gist = await createGist({
+    body,
+    category,
+    department,
+    authorHash: hash,
+    showAuthor,
+    authorName: username,
+  });
   if (!gist) {
     return NextResponse.json({ error: "Couldn't post that." }, { status: 503 });
   }

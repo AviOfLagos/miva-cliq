@@ -25,7 +25,14 @@ function connectionString(): string {
 export function getDb(): Sql | null {
   if (client !== undefined) return client;
   const url = connectionString();
-  client = url ? (neon(url) as Sql) : null;
+  // Next.js patches global fetch and caches it by default. The neon HTTP driver
+  // runs every query over fetch, so without this the same SELECT is served from
+  // Next's cache and reads go stale immediately after a write (a post wouldn't
+  // show up, /api/me wouldn't reflect a just-set username). `no-store` opts every
+  // query out of that cache — correctness over the tiny per-query saving.
+  client = url
+    ? (neon(url, { fetchOptions: { cache: "no-store" } }) as Sql)
+    : null;
   if (!client && process.env.NODE_ENV !== "production") {
     console.warn(
       "[miva-cliq] No Postgres connection string — Gists, Events and metrics are disabled.",

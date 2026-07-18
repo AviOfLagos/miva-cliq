@@ -2553,3 +2553,90 @@ input:disabled {
     padding: 8px 13px;
   }
 }
+
+/* ---- identity: username prompt, toggle, author labels ------------ */
+
+.gist-author-named {
+  color: var(--violet);
+  font-weight: 700;
+}
+
+.identity-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.identity-opt {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.identity-opt:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.identity-opt.is-active {
+  color: var(--text);
+  background: var(--grad-soft);
+  border-color: var(--border-strong);
+}
+
+.identity-edit {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.identity-edit:hover {
+  color: var(--text-dim);
+}
+
+.username-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(10, 11, 20, 0.6);
+}
+
+.username-field:focus-within {
+  border-color: var(--violet);
+  box-shadow: var(--ring-focus);
+}
+
+.username-at {
+  color: var(--text-faint);
+  font-weight: 700;
+}
+
+.username-field input {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+
+.username-hint {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}

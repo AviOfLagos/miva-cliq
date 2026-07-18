@@ -10,6 +10,7 @@ import {
   normalizeBody,
   MAX_BODY,
 } from "@/lib/store/gists";
+import { getUsername } from "@/lib/store/users";
 import { isCategory, isDepartment, DEFAULT_CATEGORY } from "@/lib/taxonomy";
 
 export const runtime = "nodejs";
@@ -57,10 +58,17 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const category = isCategory(payload?.category) ? payload.category : DEFAULT_CATEGORY;
   const department = isDepartment(payload?.department) ? payload.department : null;
 
-  const gist = await updateGist(params.id, sessionAuthorHash(session), {
+  const hash = sessionAuthorHash(session);
+  const showAuthor = payload?.showAuthor === true;
+  if (showAuthor && !(await getUsername(hash))) {
+    return NextResponse.json({ error: "username_required" }, { status: 409 });
+  }
+
+  const gist = await updateGist(params.id, hash, {
     body,
     category,
     department,
+    showAuthor,
   });
   // null == not found OR not the author — same 404 either way, so we never
   // confirm a post exists to someone who can't edit it.

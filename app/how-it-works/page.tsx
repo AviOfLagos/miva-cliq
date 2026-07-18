@@ -92,7 +92,9 @@ export default function HowItWorksPage() {
         <ul className="doc-list">
           <li>
             Your password is used one time, to log in. It is never written to a
-            database, a log, or a file — there is no database of users here.
+            database, a log, or a file. We never store your email or real name
+            either — the only thing we&apos;d keep is a username, and only if you
+            choose to pick one.
           </li>
           <li>
             The resulting Moodle session is encrypted (AES-256-GCM) and kept in
@@ -111,17 +113,32 @@ export default function HowItWorksPage() {
       </div>
 
       <div className="card doc-card">
-        <span className="badge badge-custom">GISTS</span>
-        <h2 className="doc-title">Posting anonymously</h2>
+        <span className="badge badge-custom">GISTS &amp; EVENTS</span>
+        <h2 className="doc-title">Anonymous by default — or under a handle</h2>
         <p className="doc-body">
           <Link className="miva-link" href="/gists">
             Miva Gists
           </Link>{" "}
-          is anonymous to everyone reading it. To keep spam out, you have to be
-          logged in to post — but your email is never stored alongside a post.
-          What&apos;s stored is a one-way salted hash, which is enough to
-          rate-limit an abuser and nothing else. There is no way to turn it back
-          into your address.
+          and{" "}
+          <Link className="miva-link" href="/events">
+            Events
+          </Link>{" "}
+          are anonymous by default. You can choose to post under a username
+          instead, and replies always show your username. To keep spam out you
+          have to be logged in to post — but your email is never stored with a
+          post. What&apos;s stored is a one-way salted hash (to rate-limit abuse
+          and let you edit your own posts) and, if you picked one, your username.
+        </p>
+        <p className="doc-body">
+          Being straight with you: to other students, anonymous is anonymous. But
+          the same internal hash sits on your anonymous and named posts, so the
+          operator could in principle link them. Reader-facing anonymity is real;
+          anonymity from whoever runs the database isn&apos;t something we can
+          promise. More detail on the{" "}
+          <Link className="miva-link" href="/privacy">
+            privacy page
+          </Link>
+          .
         </p>
       </div>
 

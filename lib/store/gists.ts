@@ -22,6 +22,9 @@ export type Gist = {
   createdAt: number;
   editedAt: number | null;
   replyCount: number;
+  // The poster's handle, or null when the gist is anonymous. Resolved live from
+  // `users`, so a rename shows up on old named posts; never carries the hash.
+  authorName: string | null;
 };
 
 export type Reply = {
@@ -29,6 +32,7 @@ export type Reply = {
   body: string;
   createdAt: number;
   editedAt: number | null;
+  authorName: string | null; // replies are always named; null only if the author later dropped their handle
 };
 
 type GistRow = {
@@ -39,6 +43,7 @@ type GistRow = {
   created_at: string;
   edited_at: string | null;
   reply_count: number;
+  author_name: string | null;
 };
 
 type ReplyRow = {
@@ -46,6 +51,7 @@ type ReplyRow = {
   body: string;
   created_at: string;
   edited_at: string | null;
+  author_name: string | null;
 };
 
 export function newId(): string {
@@ -69,6 +75,7 @@ function toPublic(r: GistRow): Gist {
     createdAt: new Date(r.created_at).getTime(),
     editedAt: r.edited_at ? new Date(r.edited_at).getTime() : null,
     replyCount: Number(r.reply_count) || 0,
+    authorName: r.author_name ?? null,
   };
 }
 
@@ -78,6 +85,7 @@ function toPublicReply(r: ReplyRow): Reply {
     body: r.body,
     createdAt: new Date(r.created_at).getTime(),
     editedAt: r.edited_at ? new Date(r.edited_at).getTime() : null,
+    authorName: r.author_name ?? null,
   };
 }
 
@@ -86,17 +94,24 @@ export async function createGist(input: {
   category: string;
   department: string | null;
   authorHash: string;
+  showAuthor: boolean;
+  // The author's current handle, needed only to fill the returned object when
+  // showAuthor is true. Never stored on the row — the name is resolved live.
+  authorName: string | null;
 }): Promise<Gist | null> {
   const sql = getDb();
   if (!sql) return null;
   const id = newId();
   const rows = (await sql`
-    INSERT INTO gists (id, body, category, department, author_hash)
+    INSERT INTO gists (id, body, category, department, author_hash, show_author)
     VALUES (${id}, ${input.body}, ${input.category || DEFAULT_CATEGORY},
-            ${input.department}, ${input.authorHash})
+            ${input.department}, ${input.authorHash}, ${input.showAuthor})
     RETURNING id, body, category, department, created_at, edited_at, 0 AS reply_count
   `) as GistRow[];
-  return rows[0] ? toPublic(rows[0]) : null;
+  if (!rows[0]) return null;
+  const gist = toPublic(rows[0]);
+  gist.authorName = input.showAuthor ? input.authorName : null;
+  return gist;
 }
 
 /** Single gist for its permalink page. Hidden posts read as gone (null). */
@@ -105,8 +120,10 @@ export async function getGist(id: string): Promise<Gist | null> {
   if (!sql) return null;
   const rows = (await sql`
     SELECT g.id, g.body, g.category, g.department, g.created_at, g.edited_at,
-           (SELECT count(*) FROM replies r WHERE r.gist_id = g.id) AS reply_count
+           (SELECT count(*) FROM replies r WHERE r.gist_id = g.id) AS reply_count,
+           CASE WHEN g.show_author THEN u.username ELSE NULL END AS author_name
       FROM gists g
+      LEFT JOIN users u ON u.author_hash = g.author_hash
      WHERE g.id = ${id} AND NOT g.hidden
   `) as GistRow[];
   return rows[0] ? toPublic(rows[0]) : null;
@@ -133,19 +150,27 @@ export async function ownsGist(id: string, authorHash: string): Promise<boolean>
 export async function updateGist(
   id: string,
   authorHash: string,
-  patch: { body: string; category: string; department: string | null },
+  patch: {
+    body: string;
+    category: string;
+    department: string | null;
+    showAuthor: boolean;
+  },
 ): Promise<Gist | null> {
   const sql = getDb();
   if (!sql) return null;
+  // UPDATE ... RETURNING can't join to `users`, so update-then-refetch to get the
+  // resolved author name. The author_hash predicate is still the authorization.
   const rows = (await sql`
     UPDATE gists
        SET body = ${patch.body}, category = ${patch.category},
-           department = ${patch.department}, edited_at = now()
+           department = ${patch.department}, show_author = ${patch.showAuthor},
+           edited_at = now()
      WHERE id = ${id} AND author_hash = ${authorHash} AND NOT hidden
-    RETURNING id, body, category, department, created_at, edited_at,
-              (SELECT count(*) FROM replies r WHERE r.gist_id = gists.id) AS reply_count
-  `) as GistRow[];
-  return rows[0] ? toPublic(rows[0]) : null;
+    RETURNING id
+  `) as { id: string }[];
+  if (!rows[0]) return null;
+  return getGist(id);
 }
 
 /** Author-only delete. Replies cascade via the FK. Returns false if not owner. */
@@ -179,9 +204,11 @@ export async function listGists(opts: {
   const before = opts.before ? new Date(opts.before).toISOString() : null;
 
   const rows = (await sql`
-    SELECT g.id, g.body, g.category, g.department, g.created_at,
-           (SELECT count(*) FROM replies r WHERE r.gist_id = g.id) AS reply_count
+    SELECT g.id, g.body, g.category, g.department, g.created_at, g.edited_at,
+           (SELECT count(*) FROM replies r WHERE r.gist_id = g.id) AS reply_count,
+           CASE WHEN g.show_author THEN u.username ELSE NULL END AS author_name
       FROM gists g
+      LEFT JOIN users u ON u.author_hash = g.author_hash
      WHERE NOT g.hidden
        AND (${category}::text IS NULL OR g.category = ${category})
        AND (${department}::text IS NULL OR g.department = ${department})
@@ -196,6 +223,7 @@ export async function addReply(
   gistId: string,
   body: string,
   authorHash: string,
+  authorName: string, // replies are always named; the route requires a handle
 ): Promise<Reply | null> {
   const sql = getDb();
   if (!sql) return null;
@@ -207,7 +235,10 @@ export async function addReply(
        WHERE EXISTS (SELECT 1 FROM gists WHERE id = ${gistId} AND NOT hidden)
       RETURNING id, body, created_at, edited_at
     `) as ReplyRow[];
-    return rows[0] ? toPublicReply(rows[0]) : null;
+    if (!rows[0]) return null;
+    const reply = toPublicReply(rows[0]);
+    reply.authorName = authorName;
+    return reply;
   } catch {
     return null;
   }
@@ -217,9 +248,11 @@ export async function listReplies(gistId: string): Promise<Reply[]> {
   const sql = getDb();
   if (!sql) return [];
   const rows = (await sql`
-    SELECT id, body, created_at, edited_at FROM replies
-     WHERE gist_id = ${gistId}
-     ORDER BY created_at ASC
+    SELECT r.id, r.body, r.created_at, r.edited_at, u.username AS author_name
+      FROM replies r
+      LEFT JOIN users u ON u.author_hash = r.author_hash
+     WHERE r.gist_id = ${gistId}
+     ORDER BY r.created_at ASC
      LIMIT 200
   `) as ReplyRow[];
   return rows.map(toPublicReply);
@@ -242,6 +275,7 @@ export async function updateReply(
   id: string,
   authorHash: string,
   body: string,
+  authorName: string,
 ): Promise<Reply | null> {
   const sql = getDb();
   if (!sql) return null;
@@ -250,7 +284,10 @@ export async function updateReply(
      WHERE id = ${id} AND author_hash = ${authorHash}
     RETURNING id, body, created_at, edited_at
   `) as ReplyRow[];
-  return rows[0] ? toPublicReply(rows[0]) : null;
+  if (!rows[0]) return null;
+  const reply = toPublicReply(rows[0]);
+  reply.authorName = authorName;
+  return reply;
 }
 
 export async function deleteReply(id: string, authorHash: string): Promise<boolean> {

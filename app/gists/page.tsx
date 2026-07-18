@@ -4,10 +4,10 @@ import GistsClient from "./GistsClient";
 export const metadata: Metadata = {
   title: "Gists",
   description:
-    "Anonymous notes from Miva students — courses, lecturers, housing and more. No names, no profiles.",
+    "Anonymous notes from Miva students — courses, lecturers, housing and more. Anonymous by default, or post under a handle.",
   openGraph: {
     title: "Miva Gists",
-    description: "Anonymous notes from Miva students. No names, no profiles.",
+    description: "Notes from Miva students — anonymous by default, or post under a handle.",
   },
 };
 

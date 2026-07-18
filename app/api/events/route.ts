@@ -13,6 +13,7 @@ import {
   MAX_BODY,
   MAX_LOCATION,
 } from "@/lib/store/events";
+import { getUsername } from "@/lib/store/users";
 import { isDepartment } from "@/lib/taxonomy";
 
 export const runtime = "nodejs";
@@ -96,6 +97,12 @@ export async function POST(req: NextRequest) {
   const department = isDepartment(payload?.department) ? payload.department : null;
 
   const hash = sessionAuthorHash(session);
+  const showAuthor = payload?.showAuthor === true;
+  const username = showAuthor ? await getUsername(hash) : null;
+  if (showAuthor && !username) {
+    return NextResponse.json({ error: "username_required" }, { status: 409 });
+  }
+
   const ip = clientIp(req);
   const [byUser, byIp] = await Promise.all([
     rateLimit(hash, "event", EVENTS_PER_DAY, DAY),
@@ -116,6 +123,8 @@ export async function POST(req: NextRequest) {
     link,
     department,
     authorHash: hash,
+    showAuthor,
+    authorName: username,
   });
   if (!event) {
     return NextResponse.json({ error: "Couldn't post that." }, { status: 503 });

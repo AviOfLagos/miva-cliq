@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useApp } from "@/lib/run/AppContext";
+import IdentityToggle from "@/app/components/IdentityToggle";
+import AuthorLabel from "@/app/components/AuthorLabel";
 import { departmentLabel, departmentsBySchool } from "@/lib/taxonomy";
 
 type MivaEvent = {
@@ -14,6 +16,7 @@ type MivaEvent = {
   link: string | null;
   department: string | null;
   createdAt: number;
+  authorName: string | null;
 };
 
 const MAX_TITLE = 140;
@@ -31,7 +34,7 @@ function whenLabel(ms: number): string {
 }
 
 export default function EventsClient() {
-  const { name } = useApp();
+  const { authed } = useApp();
   const [events, setEvents] = useState<MivaEvent[] | null>(null);
   const [past, setPast] = useState<MivaEvent[] | null>(null);
   const [enabled, setEnabled] = useState(true);
@@ -99,7 +102,7 @@ export default function EventsClient() {
       )}
 
       {enabled &&
-        (name ? (
+        (authed ? (
           <EventComposer onPosted={onPosted} />
         ) : (
           <div className="card doc-card gist-login">
@@ -140,7 +143,7 @@ export default function EventsClient() {
       ) : (
         <div className="gist-feed">
           {events.map((ev) => (
-            <EventCard key={ev.id} event={ev} canPost={!!name} />
+            <EventCard key={ev.id} event={ev} canPost={authed} />
           ))}
         </div>
       )}
@@ -155,7 +158,7 @@ export default function EventsClient() {
             <h2 className="events-heading">Past</h2>
             <div className="gist-feed">
               {past.map((ev) => (
-                <EventCard key={ev.id} event={ev} canPost={!!name} isPast />
+                <EventCard key={ev.id} event={ev} canPost={authed} isPast />
               ))}
             </div>
           </div>
@@ -217,7 +220,7 @@ function EventCard({
         )}
       </div>
       <div className="gist-actions">
-        <span className="gist-author">Anonymous</span>
+        <AuthorLabel name={event.authorName} />
         {canPost && !isPast && (
           <button
             type="button"
@@ -240,6 +243,7 @@ function EventComposer({ onPosted }: { onPosted: (e: MivaEvent) => void }) {
   const [location, setLocation] = useState("");
   const [link, setLink] = useState("");
   const [department, setDepartment] = useState("");
+  const [asMe, setAsMe] = useState(false);
   const [open, setOpen] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -262,6 +266,7 @@ function EventComposer({ onPosted }: { onPosted: (e: MivaEvent) => void }) {
           location: location || undefined,
           link: link || undefined,
           department: department || undefined,
+          showAuthor: asMe,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -276,6 +281,7 @@ function EventComposer({ onPosted }: { onPosted: (e: MivaEvent) => void }) {
       setLocation("");
       setLink("");
       setDepartment("");
+      setAsMe(false);
       setOpen(false);
     } catch {
       setError("Network error. Try again.");
@@ -370,6 +376,8 @@ function EventComposer({ onPosted }: { onPosted: (e: MivaEvent) => void }) {
           ))}
         </select>
       </label>
+
+      <IdentityToggle value={asMe} onChange={setAsMe} disabled={posting} />
 
       {error && (
         <div className="alert alert-error" role="alert">

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { unseal, SESSION_COOKIE } from "@/lib/session";
 import { sessionAuthorHash } from "@/lib/store/authorHash";
 import { updateReply, deleteReply, normalizeBody, MAX_BODY } from "@/lib/store/gists";
+import { getUsername } from "@/lib/store/users";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     );
   }
 
-  const reply = await updateReply(params.rid, sessionAuthorHash(session), body);
+  const hash = sessionAuthorHash(session);
+  // A reply's author always has a handle (required to reply); fall back defensively.
+  const username = (await getUsername(hash)) ?? "Anonymous";
+  const reply = await updateReply(params.rid, hash, body, username);
   if (!reply) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }

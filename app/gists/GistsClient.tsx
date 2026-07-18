@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useApp } from "@/lib/run/AppContext";
 import { timeAgo } from "@/lib/format";
+import IdentityToggle from "@/app/components/IdentityToggle";
+import AuthorLabel from "@/app/components/AuthorLabel";
 import {
   CATEGORIES,
   DEFAULT_CATEGORY,
@@ -19,15 +21,16 @@ type Gist = {
   department: string | null;
   createdAt: number;
   replyCount: number;
+  authorName: string | null;
 };
 
-type Reply = { id: string; body: string; createdAt: number };
+type Reply = { id: string; body: string; createdAt: number; authorName: string | null };
 
 const MAX_BODY = 2000;
 const DEPT_GROUPS = departmentsBySchool();
 
 export default function GistsClient() {
-  const { name } = useApp();
+  const { authed } = useApp();
   const [gists, setGists] = useState<Gist[] | null>(null);
   const [enabled, setEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,8 +95,8 @@ export default function GistsClient() {
           Miva Gists
         </h1>
         <p className="subtle">
-          Anonymous notes from Miva students. No names, no profiles — just what
-          people are saying.
+          Notes from Miva students — anonymous by default, or post under a
+          handle. Just what people are saying.
         </p>
       </div>
 
@@ -104,7 +107,7 @@ export default function GistsClient() {
         </div>
       )}
 
-      {enabled && (name ? <Composer onPosted={onPosted} /> : <LoginPrompt />)}
+      {enabled && (authed ? <Composer onPosted={onPosted} /> : <LoginPrompt />)}
 
       <div className="filter-chips" role="group" aria-label="Filter by category">
         <button
@@ -158,7 +161,7 @@ export default function GistsClient() {
       ) : (
         <div className="gist-feed">
           {gists.map((g) => (
-            <GistCard key={g.id} gist={g} canPost={!!name} />
+            <GistCard key={g.id} gist={g} canPost={authed} />
           ))}
         </div>
       )}
@@ -195,6 +198,7 @@ function Composer({ onPosted }: { onPosted: (g: Gist) => void }) {
   const [body, setBody] = useState("");
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [department, setDepartment] = useState("");
+  const [asMe, setAsMe] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -212,6 +216,7 @@ function Composer({ onPosted }: { onPosted: (g: Gist) => void }) {
           body,
           category,
           department: department || undefined,
+          showAuthor: asMe,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -290,6 +295,8 @@ function Composer({ onPosted }: { onPosted: (g: Gist) => void }) {
         </p>
       )}
 
+      <IdentityToggle value={asMe} onChange={setAsMe} disabled={posting} />
+
       {error && (
         <div className="alert alert-error" role="alert">
           <span aria-hidden="true">⚠️</span>
@@ -305,7 +312,7 @@ function Composer({ onPosted }: { onPosted: (g: Gist) => void }) {
           className="btn btn-primary btn-sm"
           disabled={posting || !body.trim() || over}
         >
-          {posting ? "Posting…" : "Post anonymously"}
+          {posting ? "Posting…" : asMe ? "Post" : "Post anonymously"}
         </button>
       </div>
     </form>
@@ -333,7 +340,7 @@ function GistCard({ gist, canPost }: { gist: Gist; canPost: boolean }) {
     <article className="card gist-card">
       <Link href={`/gists/${gist.id}`} className="gist-card-link">
         <div className="gist-meta">
-          <span className="gist-author">Anonymous</span>
+          <AuthorLabel name={gist.authorName} />
           <span aria-hidden="true">·</span>
           <span>{timeAgo(new Date(gist.createdAt).toISOString())}</span>
           {gist.category && gist.category !== "general" && (

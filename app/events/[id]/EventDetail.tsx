@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/run/AppContext";
 import { timeAgo } from "@/lib/format";
+import IdentityToggle from "@/app/components/IdentityToggle";
+import AuthorLabel from "@/app/components/AuthorLabel";
 import { departmentLabel, departmentsBySchool } from "@/lib/taxonomy";
 
 type MivaEvent = {
@@ -17,6 +19,7 @@ type MivaEvent = {
   department: string | null;
   createdAt: number;
   editedAt: number | null;
+  authorName: string | null;
 };
 
 const MAX_TITLE = 140;
@@ -129,7 +132,7 @@ export default function EventDetail({ initialEvent }: { initialEvent: MivaEvent 
             )}
           </div>
           <div className="gist-meta event-posted">
-            <span className="gist-author">Anonymous</span>
+            <AuthorLabel name={event.authorName} />
             <span aria-hidden="true">·</span>
             <span>
               posted {timeAgo(new Date(event.createdAt).toISOString())}
@@ -185,6 +188,7 @@ function EventEditor({
   const [location, setLocation] = useState(event.location ?? "");
   const [link, setLink] = useState(event.link ?? "");
   const [department, setDepartment] = useState(event.department ?? "");
+  const [asMe, setAsMe] = useState(event.authorName !== null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -205,6 +209,7 @@ function EventEditor({
           location: location || undefined,
           link: link || undefined,
           department: department || undefined,
+          showAuthor: asMe,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -290,6 +295,7 @@ function EventEditor({
           ))}
         </select>
       </label>
+      <IdentityToggle value={asMe} onChange={setAsMe} disabled={saving} />
       {error && (
         <div className="alert alert-error" role="alert">
           <span aria-hidden="true">⚠️</span>

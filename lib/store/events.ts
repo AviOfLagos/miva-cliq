@@ -23,6 +23,7 @@ export type MivaEvent = {
   department: string | null;
   createdAt: number;
   editedAt: number | null;
+  authorName: string | null; // poster's handle, or null when anonymous
 };
 
 type EventRow = {
@@ -35,6 +36,7 @@ type EventRow = {
   department: string | null;
   created_at: string;
   edited_at: string | null;
+  author_name: string | null;
 };
 
 function toPublic(r: EventRow): MivaEvent {
@@ -48,6 +50,7 @@ function toPublic(r: EventRow): MivaEvent {
     department: r.department,
     createdAt: new Date(r.created_at).getTime(),
     editedAt: r.edited_at ? new Date(r.edited_at).getTime() : null,
+    authorName: r.author_name ?? null,
   };
 }
 
@@ -88,18 +91,23 @@ export async function createEvent(input: {
   link: string | null;
   department: string | null;
   authorHash: string;
+  showAuthor: boolean;
+  authorName: string | null;
 }): Promise<MivaEvent | null> {
   const sql = getDb();
   if (!sql) return null;
   const id = newId();
   const rows = (await sql`
-    INSERT INTO events (id, title, body, starts_at, location, link, department, author_hash)
+    INSERT INTO events (id, title, body, starts_at, location, link, department, author_hash, show_author)
     VALUES (${id}, ${input.title}, ${input.body},
             ${new Date(input.startsAt).toISOString()}, ${input.location},
-            ${input.link}, ${input.department}, ${input.authorHash})
+            ${input.link}, ${input.department}, ${input.authorHash}, ${input.showAuthor})
     RETURNING id, title, body, starts_at, location, link, department, created_at, edited_at
   `) as EventRow[];
-  return rows[0] ? toPublic(rows[0]) : null;
+  if (!rows[0]) return null;
+  const event = toPublic(rows[0]);
+  event.authorName = input.showAuthor ? input.authorName : null;
+  return event;
 }
 
 /**
@@ -116,19 +124,25 @@ export async function listEvents(opts: {
 
   const rows = opts.past
     ? ((await sql`
-        SELECT id, title, body, starts_at, location, link, department, created_at, edited_at
-          FROM events
-         WHERE NOT hidden AND starts_at < now()
-           AND (${department}::text IS NULL OR department = ${department})
-         ORDER BY starts_at DESC
+        SELECT e.id, e.title, e.body, e.starts_at, e.location, e.link, e.department,
+               e.created_at, e.edited_at,
+               CASE WHEN e.show_author THEN u.username ELSE NULL END AS author_name
+          FROM events e
+          LEFT JOIN users u ON u.author_hash = e.author_hash
+         WHERE NOT e.hidden AND e.starts_at < now()
+           AND (${department}::text IS NULL OR e.department = ${department})
+         ORDER BY e.starts_at DESC
          LIMIT ${PAGE_SIZE}
       `) as EventRow[])
     : ((await sql`
-        SELECT id, title, body, starts_at, location, link, department, created_at, edited_at
-          FROM events
-         WHERE NOT hidden AND starts_at >= now()
-           AND (${department}::text IS NULL OR department = ${department})
-         ORDER BY starts_at ASC
+        SELECT e.id, e.title, e.body, e.starts_at, e.location, e.link, e.department,
+               e.created_at, e.edited_at,
+               CASE WHEN e.show_author THEN u.username ELSE NULL END AS author_name
+          FROM events e
+          LEFT JOIN users u ON u.author_hash = e.author_hash
+         WHERE NOT e.hidden AND e.starts_at >= now()
+           AND (${department}::text IS NULL OR e.department = ${department})
+         ORDER BY e.starts_at ASC
          LIMIT ${PAGE_SIZE}
       `) as EventRow[]);
   return rows.map(toPublic);
@@ -139,9 +153,12 @@ export async function getEvent(id: string): Promise<MivaEvent | null> {
   const sql = getDb();
   if (!sql) return null;
   const rows = (await sql`
-    SELECT id, title, body, starts_at, location, link, department, created_at, edited_at
-      FROM events
-     WHERE id = ${id} AND NOT hidden
+    SELECT e.id, e.title, e.body, e.starts_at, e.location, e.link, e.department,
+           e.created_at, e.edited_at,
+           CASE WHEN e.show_author THEN u.username ELSE NULL END AS author_name
+      FROM events e
+      LEFT JOIN users u ON u.author_hash = e.author_hash
+     WHERE e.id = ${id} AND NOT e.hidden
   `) as EventRow[];
   return rows[0] ? toPublic(rows[0]) : null;
 }
@@ -169,20 +186,24 @@ export async function updateEvent(
     location: string | null;
     link: string | null;
     department: string | null;
+    showAuthor: boolean;
   },
 ): Promise<MivaEvent | null> {
   const sql = getDb();
   if (!sql) return null;
+  // Update-then-refetch so the returned event carries the resolved author name.
   const rows = (await sql`
     UPDATE events
        SET title = ${patch.title}, body = ${patch.body},
            starts_at = ${new Date(patch.startsAt).toISOString()},
            location = ${patch.location}, link = ${patch.link},
-           department = ${patch.department}, edited_at = now()
+           department = ${patch.department}, show_author = ${patch.showAuthor},
+           edited_at = now()
      WHERE id = ${id} AND author_hash = ${authorHash} AND NOT hidden
-    RETURNING id, title, body, starts_at, location, link, department, created_at, edited_at
-  `) as EventRow[];
-  return rows[0] ? toPublic(rows[0]) : null;
+    RETURNING id
+  `) as { id: string }[];
+  if (!rows[0]) return null;
+  return getEvent(id);
 }
 
 export async function deleteEvent(id: string, authorHash: string): Promise<boolean> {

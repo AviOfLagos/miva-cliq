@@ -14,6 +14,7 @@ import {
   MAX_BODY,
   MAX_LOCATION,
 } from "@/lib/store/events";
+import { getUsername } from "@/lib/store/users";
 import { isDepartment } from "@/lib/taxonomy";
 
 export const runtime = "nodejs";
@@ -86,13 +87,20 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   }
   const department = isDepartment(payload?.department) ? payload.department : null;
 
-  const event = await updateEvent(params.id, sessionAuthorHash(session), {
+  const hash = sessionAuthorHash(session);
+  const showAuthor = payload?.showAuthor === true;
+  if (showAuthor && !(await getUsername(hash))) {
+    return NextResponse.json({ error: "username_required" }, { status: 409 });
+  }
+
+  const event = await updateEvent(params.id, hash, {
     title,
     body: body || "",
     startsAt,
     location,
     link,
     department,
+    showAuthor,
   });
   if (!event) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });

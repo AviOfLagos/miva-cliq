@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/run/AppContext";
 import { timeAgo } from "@/lib/format";
+import IdentityToggle from "@/app/components/IdentityToggle";
+import AuthorLabel from "@/app/components/AuthorLabel";
+import UsernamePrompt from "@/app/components/UsernamePrompt";
 import {
   CATEGORIES,
   DEFAULT_CATEGORY,
@@ -21,6 +24,7 @@ type Gist = {
   createdAt: number;
   editedAt: number | null;
   replyCount: number;
+  authorName: string | null;
 };
 
 type Reply = {
@@ -28,6 +32,7 @@ type Reply = {
   body: string;
   createdAt: number;
   editedAt: number | null;
+  authorName: string | null;
 };
 
 const MAX_BODY = 2000;
@@ -39,7 +44,7 @@ function metaLine(createdAt: number, editedAt: number | null): string {
 }
 
 export default function GistDetail({ initialGist }: { initialGist: Gist }) {
-  const { name } = useApp();
+  const { authed } = useApp();
   const router = useRouter();
   const [gist, setGist] = useState<Gist>(initialGist);
   const [mine, setMine] = useState(false);
@@ -119,7 +124,7 @@ export default function GistDetail({ initialGist }: { initialGist: Gist }) {
       ) : (
         <article className="card gist-card gist-detail">
           <div className="gist-meta">
-            <span className="gist-author">Anonymous</span>
+            <AuthorLabel name={gist.authorName} />
             <span aria-hidden="true">·</span>
             <span>{metaLine(gist.createdAt, gist.editedAt)}</span>
             {gist.category !== "general" && (
@@ -181,7 +186,7 @@ export default function GistDetail({ initialGist }: { initialGist: Gist }) {
           ))
         )}
 
-        {name ? (
+        {authed ? (
           <ReplyForm
             gistId={gist.id}
             onAdded={(r) => {
@@ -215,6 +220,7 @@ function GistEditor({
   const [body, setBody] = useState(gist.body);
   const [category, setCategory] = useState(gist.category || DEFAULT_CATEGORY);
   const [department, setDepartment] = useState(gist.department ?? "");
+  const [asMe, setAsMe] = useState(gist.authorName !== null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -228,7 +234,12 @@ function GistEditor({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ body, category, department: department || undefined }),
+        body: JSON.stringify({
+          body,
+          category,
+          department: department || undefined,
+          showAuthor: asMe,
+        }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -294,6 +305,7 @@ function GistEditor({
           ⚠ Tagging a department makes your post easier to trace back to you.
         </p>
       )}
+      <IdentityToggle value={asMe} onChange={setAsMe} disabled={saving} />
       {error && (
         <div className="alert alert-error" role="alert">
           <span aria-hidden="true">⚠️</span>
@@ -380,7 +392,7 @@ function ReplyItem({
   return (
     <div className="gist-reply">
       <div className="gist-meta">
-        <span className="gist-author">Anonymous</span>
+        <AuthorLabel name={reply.authorName} />
         <span aria-hidden="true">·</span>
         <span>{metaLine(reply.createdAt, reply.editedAt)}</span>
       </div>
@@ -442,13 +454,13 @@ function ReplyForm({
   gistId: string;
   onAdded: (r: Reply) => void;
 }) {
+  const { username } = useApp();
   const [body, setBody] = useState("");
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (posting || !body.trim()) return;
+  const doPost = async () => {
     setPosting(true);
     setError(null);
     try {
@@ -460,6 +472,10 @@ function ReplyForm({
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
+        if (data?.error === "username_required") {
+          setPromptOpen(true); // pick a handle, then they can retry
+          return;
+        }
         setError(data?.error || "Couldn't reply.");
         return;
       }
@@ -472,11 +488,28 @@ function ReplyForm({
     }
   };
 
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (posting || !body.trim()) return;
+    // Replies are always named — get a handle first if there isn't one.
+    if (!username) {
+      setPromptOpen(true);
+      return;
+    }
+    doPost();
+  };
+
   return (
     <form className="gist-reply-form" onSubmit={submit}>
+      <UsernamePrompt
+        open={promptOpen}
+        onClose={() => setPromptOpen(false)}
+        onSaved={() => doPost()}
+        reason="Replies show your username. Pick one to reply."
+      />
       <input
         type="text"
-        placeholder="Reply anonymously…"
+        placeholder={username ? `Reply as @${username}…` : "Reply…"}
         value={body}
         onChange={(e) => setBody(e.target.value)}
         disabled={posting}

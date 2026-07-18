@@ -8,14 +8,18 @@ import GistDetail from "./GistDetail";
 type Props = { params: { id: string } };
 
 // Each gist is its own shareable link, so its card and title come from the post.
+// noindex: posts are anonymous by default, and permanently indexing them would
+// defeat that. Link-preview cards still work — robots only stops search
+// cataloguing, not the OG/Twitter meta a chat app reads when the URL is shared.
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const gist = await getGist(params.id);
-  if (!gist) return { title: "Gist not found" };
+  if (!gist) return { title: "Gist not found", robots: { index: false, follow: false } };
   const desc = snippet(gist.body, 160);
   const title = snippet(gist.body, 60);
   return {
     title,
     description: desc,
+    robots: { index: false, follow: false },
     openGraph: { title: `Miva Gists · ${categoryLabel(gist.category)}`, description: desc },
     twitter: { card: "summary_large_image", title, description: desc },
   };

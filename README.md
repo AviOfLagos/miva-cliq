@@ -40,6 +40,12 @@ app/gists/        anonymous community board
 app/how-it-works/, app/terms/, app/privacy/, app/disclaimer/   info + legal
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the PR flow, and the two rules
+that aren't negotiable: graded work is never touched, and no identifying data is
+ever stored.
+
 ## Adding a completion method
 
 The LMS will change, or a new activity type will appear. To handle it:

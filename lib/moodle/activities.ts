@@ -18,10 +18,17 @@ export interface Activity {
   trackable: boolean; // istrackeduser
 }
 
-export async function getActivities(
+/** A course section (topic / week) as the course page groups activities. */
+export interface Section {
+  number: number;
+  title: string;
+}
+
+/** Activities + section titles from a single core_courseformat_get_state call. */
+export async function getCourseState(
   session: MoodleSession,
   courseId: number,
-): Promise<Activity[]> {
+): Promise<{ activities: Activity[]; sections: Section[] }> {
   const res = await ajax(session, "core_courseformat_get_state", {
     courseid: courseId,
   });
@@ -31,7 +38,14 @@ export async function getActivities(
   // data is a JSON *string* here.
   const state = typeof res.data === "string" ? JSON.parse(res.data) : res.data;
   const cms = (state?.cm || []) as any[];
-  return cms.map((c) => ({
+  const sections = ((state?.section || []) as any[])
+    .map((s) => ({
+      number: Number(s.number ?? s.sectionnumber ?? s.section ?? -1),
+      title: String(s.title || s.name || "").trim(),
+    }))
+    .filter((s) => Number.isFinite(s.number) && s.number >= 0);
+
+  const activities: Activity[] = cms.map((c) => ({
     cmid: Number(c.id),
     name: c.name || "",
     modname: c.module || c.modname || "",
@@ -43,6 +57,16 @@ export async function getActivities(
     section: c.sectionnumber ?? null,
     trackable: !!c.istrackeduser,
   }));
+
+  return { activities, sections };
+}
+
+export async function getActivities(
+  session: MoodleSession,
+  courseId: number,
+): Promise<Activity[]> {
+  const { activities } = await getCourseState(session, courseId);
+  return activities;
 }
 
 /** Re-read a single activity's completion state (for verification). */

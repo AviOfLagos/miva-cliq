@@ -115,3 +115,35 @@ CREATE TABLE IF NOT EXISTS metric_counters (
   name   TEXT PRIMARY KEY,
   value  BIGINT NOT NULL DEFAULT 0
 );
+
+-- Shared answer bank for UNGRADED weekly quizzes only. Keyed on a hash of the
+-- normalized question text, NOT on question/option position: Moodle shuffles
+-- option order per attempt and can draw different questions per student from a
+-- question bank, so a positional key would serve wrong answers. Hashing the text
+-- makes the same question dedupe across attempts, weeks, and students.
+--
+-- Nothing graded is ever stored here (enforced in lib/quiz/run.ts before any
+-- attempt). course_code/department/section/semester/year are browse metadata,
+-- not part of identity.
+CREATE TABLE IF NOT EXISTS quiz_answers (
+  question_hash   TEXT PRIMARY KEY,                 -- sha256 of normalized question text
+  question_text   TEXT        NOT NULL,
+  qtype           TEXT        NOT NULL,             -- multichoice | truefalse (option-based only)
+  answer_text     TEXT        NOT NULL,             -- correct option text (matched by text, not position)
+  answer_multi    JSONB,                            -- selected option texts for multi-answer multichoice
+  status          TEXT        NOT NULL DEFAULT 'unconfirmed',  -- unconfirmed | confirmed
+  confirm_count   INT         NOT NULL DEFAULT 0,
+  refute_count    INT         NOT NULL DEFAULT 0,
+  course_code     TEXT,                             -- e.g. cos202 (browse metadata)
+  department      TEXT,                             -- validated slug
+  section         INT,                              -- Moodle section ~ week
+  semester        TEXT,
+  year            INT,
+  source          TEXT        NOT NULL DEFAULT 'ai',-- ai | attempt | edit
+  author_hash     TEXT,                             -- last contributor (abuse control)
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS quiz_answers_browse_idx
+  ON quiz_answers (course_code, section);

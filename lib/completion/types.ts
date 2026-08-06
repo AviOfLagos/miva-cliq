@@ -6,6 +6,7 @@ export type ActionKind =
   | "mark" // manual "mark as done"
   | "view" // completes on view (GET the activity)
   | "forum" // needs a forum interaction
+  | "quiz" // ungraded quiz -> AI/answer-bank attempt (opt-in)
   | "skip-graded" // graded test/assignment -> user does it
   | "skip-none" // no completion tracking -> nothing to do
   | "already" // already complete
@@ -26,6 +27,10 @@ export interface StrategyContext {
   verify(cmid: number): Promise<number | null>;
   /** User-supplied forum reply messages; one is picked at random per forum. */
   forumTexts: string[];
+  /** Opt-in: attempt ungraded quizzes via AI/answer-bank. Off by default. */
+  answerQuizzes: boolean;
+  /** Course display name, for deriving the answer-bank course_code metadata. */
+  courseName: string | null;
   /** Post a reply into a forum. See ReplyResult for the outcomes. */
   replyToForum(
     forumUrl: string,
@@ -37,6 +42,10 @@ export interface StrategyContext {
 export interface RunOptions {
   /** Reply messages a user provided for post-required forums. */
   forumTexts?: string[];
+  /** Opt-in: attempt ungraded quizzes. */
+  answerQuizzes?: boolean;
+  /** Course display name (client knows it; used for answer-bank metadata). */
+  courseName?: string | null;
 }
 
 export interface RunResult {

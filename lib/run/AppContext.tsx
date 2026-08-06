@@ -22,7 +22,13 @@ import {
 } from "react";
 import { readSSE } from "./sse";
 import { saveHistoryRecord, LAST_RUN_KEY } from "./history";
-import { loadForumTexts, saveForumTexts, DEFAULT_FORUM_TEXTS } from "./prefs";
+import {
+  loadForumTexts,
+  saveForumTexts,
+  DEFAULT_FORUM_TEXTS,
+  loadAnswerQuizzes,
+  saveAnswerQuizzes,
+} from "./prefs";
 import type {
   ActivityStatus,
   HistoryCourse,
@@ -72,6 +78,9 @@ type AppValue = {
   /* forum reply preferences */
   forumTexts: string[];
   setForumTexts: (texts: string[]) => void;
+  /* opt-in: attempt ungraded weekly quizzes */
+  answerQuizzes: boolean;
+  setAnswerQuizzes: (on: boolean) => void;
   /* community identity (Gists/Events) */
   authed: boolean; // has a valid Miva session cookie (can post)
   username: string | null; // chosen handle, null = none yet
@@ -131,6 +140,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [email],
   );
 
+  /* ---- ungraded-quiz opt-in (per-device, default off) ---- */
+  const [answerQuizzes, setAnswerQuizzesState] = useState<boolean>(false);
+  const answerQuizzesRef = useRef<boolean>(false);
+  const setAnswerQuizzes = useCallback(
+    (on: boolean) => {
+      setAnswerQuizzesState(on);
+      answerQuizzesRef.current = on;
+      if (email) saveAnswerQuizzes(email, on);
+    },
+    [email],
+  );
+
   /* ---- run ---- */
   const [runMode, setRunMode] = useState<RunMode | null>(null);
   const [phase, setPhase] = useState<RunPhase>("planning");
@@ -166,6 +187,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const texts = loadForumTexts(mail);
       setForumTextsState(texts);
       forumTextsRef.current = texts;
+      const aq = loadAnswerQuizzes(mail);
+      setAnswerQuizzesState(aq);
+      answerQuizzesRef.current = aq;
       setScreen("choose");
       // Just authenticated — pull the community handle (usually null at first).
       refreshMe();
@@ -320,7 +344,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             credentials: "include",
             body: JSON.stringify({
               courseId: course.id,
+              courseName: course.fullname,
               forumTexts: forumTextsRef.current,
+              answerQuizzes: answerQuizzesRef.current,
             }),
           });
           if (!isCurrent(token)) return;
@@ -502,6 +528,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleExpand,
     forumTexts,
     setForumTexts,
+    answerQuizzes,
+    setAnswerQuizzes,
     authed,
     username,
     setUsername,

@@ -6,6 +6,7 @@
  * insert it here at the right priority. No engine changes needed.
  */
 import type { Strategy } from "./types";
+import { aiQuizAnswer } from "./strategies/aiQuizAnswer";
 import { gradedSkip } from "./strategies/gradedSkip";
 import { noCompletion } from "./strategies/noCompletion";
 import { forumReply } from "./strategies/forumReply";
@@ -13,11 +14,12 @@ import { manualMarkDone } from "./strategies/manualMarkDone";
 import { unknownFallback } from "./strategies/unknownFallback";
 
 export const registry: Strategy[] = [
-  gradedSkip, // 1. never touch graded tests/assignments
-  noCompletion, // 2. nothing to do (untracked)
-  forumReply, // 3. forums (may need a reply)
-  manualMarkDone, // 4. everything else content: mark / view
-  unknownFallback, // 5. safety net — reports, never fakes
+  aiQuizAnswer, // 1. quizzes: attempt when opted-in (ungraded-only), else skip
+  gradedSkip, // 2. never touch graded tests/assignments
+  noCompletion, // 3. nothing to do (untracked)
+  forumReply, // 4. forums (may need a reply)
+  manualMarkDone, // 5. everything else content: mark / view
+  unknownFallback, // 6. safety net — reports, never fakes
 ];
 
 /** Pick the strategy that owns an activity (used by both plan and run). */

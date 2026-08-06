@@ -7,6 +7,8 @@ import { useApp } from "@/lib/run/AppContext";
 const NAV = [
   { href: "/", label: "Gists" },
   { href: "/events", label: "Events" },
+  { href: "/answers", label: "Answers" },
+  { href: "/study-pack", label: "Study pack" },
 ];
 
 export default function TopBar() {

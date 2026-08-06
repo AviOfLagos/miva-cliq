@@ -76,6 +76,8 @@ function makeContext(
     session,
     courseId,
     forumTexts: (options.forumTexts || []).filter((t) => t.trim().length > 0),
+    answerQuizzes: options.answerQuizzes === true,
+    courseName: options.courseName ?? null,
     async mark(cmid, completed) {
       const res = await ajax(
         session,

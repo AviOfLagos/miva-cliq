@@ -95,8 +95,8 @@ CREATE TABLE IF NOT EXISTS reports (
 -- reason about than a fixed window, and old rows are pruned on write.
 CREATE TABLE IF NOT EXISTS rate_events (
   id          BIGSERIAL PRIMARY KEY,
-  actor       TEXT        NOT NULL,   -- author_hash or ip:<addr>
-  kind        TEXT        NOT NULL,   -- 'gist' | 'reply' | 'event'
+  actor       TEXT        NOT NULL,   -- author_hash, ip:<addr>, or acct:<hash>
+  kind        TEXT        NOT NULL,   -- 'gist' | 'reply' | 'event' | 'quiz-edit' | 'login'
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

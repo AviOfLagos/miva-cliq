@@ -5,6 +5,7 @@
  */
 
 const FORUM_TEXTS_PREFIX = "miva-cliq-forum-texts:";
+const ANSWER_QUIZZES_PREFIX = "miva-cliq-answer-quizzes:";
 
 /** Sensible starter replies. Editable by the user; kept generic and on-topic. */
 export const DEFAULT_FORUM_TEXTS: string[] = [
@@ -32,6 +33,29 @@ export function loadForumTexts(email: string): string[] {
 export function saveForumTexts(email: string, texts: string[]): void {
   try {
     localStorage.setItem(key(email), JSON.stringify(texts));
+  } catch {
+    /* ignore quota / privacy mode */
+  }
+}
+
+/**
+ * Opt-in to attempting ungraded weekly quizzes during a run. Default OFF — a
+ * quiz attempt is a real submission, so it never happens unless the user asks.
+ */
+export function loadAnswerQuizzes(email: string): boolean {
+  try {
+    return localStorage.getItem(ANSWER_QUIZZES_PREFIX + (email || "anon").toLowerCase()) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveAnswerQuizzes(email: string, on: boolean): void {
+  try {
+    localStorage.setItem(
+      ANSWER_QUIZZES_PREFIX + (email || "anon").toLowerCase(),
+      on ? "1" : "0",
+    );
   } catch {
     /* ignore quota / privacy mode */
   }

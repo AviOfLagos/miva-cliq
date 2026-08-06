@@ -28,7 +28,7 @@ function norm(s: string): string {
 }
 
 /** Pull a course code like "COS 202" / "MTH202" out of a title. */
-function codeOf(s: string): string | null {
+export function codeOf(s: string): string | null {
   const m = s.match(/([a-z]{2,5})\s*[-]?\s*(\d{3})/i);
   return m ? `${m[1]}${m[2]}`.toLowerCase() : null;
 }

@@ -20,6 +20,7 @@ export type Course = {
 
 export type Action =
   | "mark"
+  | "quiz"
   | "skip-graded"
   | "skip-none"
   | "forum"

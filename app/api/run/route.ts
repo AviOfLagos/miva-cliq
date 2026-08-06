@@ -27,6 +27,8 @@ export async function POST(req: NextRequest) {
 
   let courseId: number;
   let forumTexts: string[] = [];
+  let answerQuizzes = false;
+  let courseName: string | null = null;
   try {
     const body = await req.json();
     courseId = Number(body.courseId);
@@ -38,6 +40,8 @@ export async function POST(req: NextRequest) {
         .filter((t: string) => t.length > 0)
         .slice(0, 20);
     }
+    answerQuizzes = body.answerQuizzes === true;
+    if (typeof body.courseName === "string") courseName = body.courseName;
   } catch {
     return new Response("event: error\ndata: {\"message\":\"Invalid request.\"}\n\n", {
       status: 400,
@@ -57,7 +61,7 @@ export async function POST(req: NextRequest) {
           session,
           courseId,
           (e) => send("progress", e),
-          { forumTexts },
+          { forumTexts, answerQuizzes, courseName },
         );
         send("done", { courseId, summary });
       } catch (e: any) {

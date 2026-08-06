@@ -25,6 +25,7 @@ import type {
 
 const ACTION_META: Record<Action, { label: string; icon: string }> = {
   mark: { label: "Complete", icon: "✓" },
+  quiz: { label: "Quiz · ungraded", icon: "🧠" },
   "skip-graded": { label: "Skip · graded", icon: "🎓" },
   "skip-none": { label: "Skip · manual", icon: "—" },
   forum: { label: "Forum", icon: "💬" },
@@ -454,6 +455,7 @@ function ChooseScreen() {
       )}
 
       <ForumTextsEditor />
+      <QuizToggle />
 
       {modalOpen && preset && (
         <PresetModal
@@ -550,6 +552,34 @@ function ForumTextsEditor() {
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Ungraded-quiz opt-in toggle                                        */
+/* ------------------------------------------------------------------ */
+
+function QuizToggle() {
+  const { answerQuizzes, setAnswerQuizzes } = useApp();
+  return (
+    <div className="quiz-toggle">
+      <label className="quiz-toggle-row">
+        <input
+          type="checkbox"
+          checked={answerQuizzes}
+          onChange={(e) => setAnswerQuizzes(e.target.checked)}
+        />
+        <span className="quiz-toggle-text">
+          <span className="quiz-toggle-title">🧠 Attempt ungraded weekly quizzes</span>
+          <span className="subtle">
+            Off by default. When on, we attempt <strong>ungraded</strong>,
+            multiple-choice quizzes using AI and a shared answer bank that fills in
+            as students take them. Graded tests and exams are never touched, and
+            non-multiple-choice questions are left blank.
+          </span>
+        </span>
+      </label>
     </div>
   );
 }
@@ -821,6 +851,8 @@ function CustomScreen() {
           </ul>
         )}
       </div>
+
+      <QuizToggle />
 
       <div className="sticky-actions">
         <span className="selected-count">

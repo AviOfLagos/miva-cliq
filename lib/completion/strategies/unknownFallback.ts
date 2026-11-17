@@ -11,6 +11,7 @@ export const unknownFallback: Strategy = {
   detect: () => true,
   run: async (a) => ({
     outcome: "failed",
+    reason: "unknown-type",
     detail: `unhandled activity type "${a.modname}" — needs a new strategy`,
   }),
 };

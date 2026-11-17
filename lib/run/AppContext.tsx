@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from "react";
 import { readSSE } from "./sse";
+import { nextPass, type PassResult, type ResumeState } from "./resume";
 import { saveHistoryRecord, LAST_RUN_KEY } from "./history";
 import {
   loadForumTexts,
@@ -329,7 +330,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [pushLog, onSessionExpired],
   );
 
-  /* ---- run sequentially ---- */
+  /* ---- run sequentially; each course may take several passes ---- */
   const runAll = useCallback(
     async (token: number) => {
       for (const course of courses) {
@@ -337,74 +338,124 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setActiveCourseId(course.id);
         setExpanded((prev) => new Set(prev).add(course.id));
         pushLog(`Starting: ${course.fullname}`, "info");
-        try {
-          const res = await fetch("/api/run", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              courseId: course.id,
-              courseName: course.fullname,
-              forumTexts: forumTextsRef.current,
-              answerQuizzes: answerQuizzesRef.current,
-            }),
-          });
-          if (!isCurrent(token)) return;
-          if (res.status === 401) {
-            onSessionExpired();
-            return;
+
+        // Local mirror of this course's statuses (React state is async), so the
+        // loop can pass `settled` and build the summary across passes.
+        const statuses = new Map<number, ActivityStatus>(
+          course.activities.map((a) => [a.cmid, a.status]),
+        );
+        const settled = new Set<number>();
+        let resume: ResumeState = { pass: 0, silentEnds: 0 };
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          resume = { ...resume, pass: resume.pass + 1 };
+          if (resume.pass > 1) {
+            pushLog(`${course.fullname}: continuing (pass ${resume.pass})`, "info");
           }
-          if (!res.ok || !res.body) {
-            markCourseComplete(course.id);
-            pushLog(`Could not start ${course.fullname}.`, "bad");
-            continue;
-          }
-          await readSSE(res, (event, dataStr) => {
+          const pass: PassResult = {
+            gotDone: false,
+            errored: false,
+            remaining: 0,
+            newlySettled: 0,
+          };
+          try {
+            const res = await fetch("/api/run", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                courseId: course.id,
+                courseName: course.fullname,
+                forumTexts: forumTextsRef.current,
+                answerQuizzes: answerQuizzesRef.current,
+                settled: Array.from(settled),
+              }),
+            });
             if (!isCurrent(token)) return;
-            let data: any = null;
-            try {
-              data = JSON.parse(dataStr);
-            } catch {
+            if (res.status === 401) {
+              onSessionExpired();
               return;
             }
-            if (event === "progress") {
-              const status: ActivityStatus = data.status;
-              applyProgress(
-                data.courseId ?? course.id,
-                data.cmid,
-                status,
-                data.detail,
-              );
-              const tone: LogLine["tone"] =
-                status === "failed"
-                  ? "bad"
-                  : status === "skipped"
-                    ? "warn"
-                    : "good";
-              const verb =
-                status === "done"
-                  ? "Completed"
-                  : status === "already"
-                    ? "Already done"
-                    : status === "skipped"
-                      ? "Skipped"
-                      : "Failed";
-              pushLog(`${verb}: ${data.name ?? "activity"}`, tone);
-            } else if (event === "done") {
-              markCourseComplete(
-                data.courseId ?? course.id,
-                data.summary as RunSummary,
-              );
-              pushLog(`Finished: ${course.fullname}`, "good");
-            } else if (event === "error") {
-              pushLog(`${course.fullname}: ${data.message || "run error"}`, "bad");
+            if (!res.ok || !res.body) {
+              pushLog(`Could not start ${course.fullname}.`, "bad");
+              pass.errored = true;
+            } else {
+              await readSSE(res, (event, dataStr) => {
+                if (!isCurrent(token)) return;
+                let data: any = null;
+                try {
+                  data = JSON.parse(dataStr);
+                } catch {
+                  return;
+                }
+                if (event === "progress") {
+                  const status: ActivityStatus = data.status;
+                  applyProgress(course.id, data.cmid, status, data.detail);
+                  statuses.set(data.cmid, status);
+                  if (!data.retry && !settled.has(data.cmid)) {
+                    settled.add(data.cmid);
+                    pass.newlySettled++;
+                  }
+                  const tone: LogLine["tone"] =
+                    status === "failed"
+                      ? "bad"
+                      : status === "skipped"
+                        ? "warn"
+                        : "good";
+                  const verb =
+                    status === "done"
+                      ? "Completed"
+                      : status === "already"
+                        ? "Already done"
+                        : status === "skipped"
+                          ? "Skipped"
+                          : "Failed";
+                  pushLog(`${verb}: ${data.name ?? "activity"}`, tone);
+                } else if (event === "done") {
+                  pass.gotDone = true;
+                  pass.remaining = Number(data?.summary?.remaining) || 0;
+                } else if (event === "error") {
+                  pass.errored = true;
+                  pushLog(`${course.fullname}: ${data.message || "run error"}`, "bad");
+                }
+              });
             }
-          });
-        } catch {
+          } catch {
+            if (!isCurrent(token)) return;
+            // Network drop or the function was killed mid-stream: treated as a
+            // cut-off pass below, so it is retried.
+          }
           if (!isCurrent(token)) return;
-          markCourseComplete(course.id);
-          pushLog(`Error running ${course.fullname}.`, "bad");
+
+          const step = nextPass(resume, pass);
+          resume = step.state;
+          if (!step.resume) {
+            if (step.why === "pass-cap" || step.why === "no-response") {
+              pushLog(`${course.fullname}: stopped after ${resume.pass} pass(es).`, "warn");
+            }
+            break;
+          }
         }
+
+        // Anything never reached is reported, not left spinning.
+        for (const [cmid, st] of Array.from(statuses)) {
+          if (st === "pending") {
+            applyProgress(course.id, cmid, "failed", "not reached — run this course again");
+            statuses.set(cmid, "failed");
+          }
+        }
+        const count = (st: ActivityStatus) =>
+          Array.from(statuses.values()).filter((x) => x === st).length;
+        const summary: RunSummary = {
+          done: count("done"),
+          already: count("already"),
+          skipped: count("skipped"),
+          failed: count("failed"),
+          total: statuses.size,
+        };
+        markCourseComplete(course.id, summary);
+        pushLog(`Finished: ${course.fullname}`, summary.failed > 0 ? "warn" : "good");
       }
       if (isCurrent(token)) {
         setActiveCourseId(null);

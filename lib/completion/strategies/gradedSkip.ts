@@ -18,5 +18,9 @@ export const gradedSkip: Strategy = {
     a.modname === "quiz" ||
     a.modname === "assign" ||
     GRADED_NAME.test(a.name),
-  run: async () => ({ outcome: "skipped", detail: "graded/test — left for you" }),
+  run: async () => ({
+    outcome: "skipped",
+    reason: "graded",
+    detail: "graded/test — left for you",
+  }),
 };

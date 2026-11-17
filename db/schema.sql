@@ -147,3 +147,16 @@ CREATE TABLE IF NOT EXISTS quiz_answers (
 
 CREATE INDEX IF NOT EXISTS quiz_answers_browse_idx
   ON quiz_answers (course_code, section);
+-- Completion telemetry: daily counters of what the engine did, by activity type,
+-- outcome and reason key (e.g. page/done/marked, url/done/viewed,
+-- h5pactivity/failed/needs-score, lesson/failed/locked). No user, course or
+-- activity identity — only aggregate counts. This is how we notice when the LMS
+-- changes. Written once per /api/run pass (lib/store/completionStats.ts).
+CREATE TABLE IF NOT EXISTS completion_outcomes (
+  day      DATE    NOT NULL DEFAULT CURRENT_DATE,
+  modname  TEXT    NOT NULL,
+  outcome  TEXT    NOT NULL,            -- done | already | skipped | failed
+  reason   TEXT    NOT NULL DEFAULT '', -- see Reason in lib/completion/types.ts
+  n        BIGINT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, modname, outcome, reason)
+);

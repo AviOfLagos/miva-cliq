@@ -331,13 +331,23 @@ function ChooseScreen() {
     loadPresets();
   }, [loadPresets]);
 
-  // Detect level/semester from this semester's courses. Passing the confirmed
-  // department lets the server record the curriculum and return package notes.
+  // Detect level/semester from this semester's courses. GET is read-only (the
+  // stored department only selects package notes); confirming a department is
+  // a POST, which is what records the curriculum.
   const loadProfile = useCallback(
-    async (dept: string) => {
+    async (dept: string, confirm = false) => {
       try {
-        const qs = dept ? `?department=${encodeURIComponent(dept)}` : "";
-        const res = await fetch(`/api/profile${qs}`, { credentials: "include" });
+        const res = confirm
+          ? await fetch("/api/profile", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ department: dept }),
+            })
+          : await fetch(
+              `/api/profile${dept ? `?department=${encodeURIComponent(dept)}` : ""}`,
+              { credentials: "include" },
+            );
         if (res.status === 401) {
           onSessionExpired();
           return;
@@ -365,7 +375,7 @@ function ChooseScreen() {
     if (!isDepartment(slug)) return;
     saveDepartment(email, slug);
     setDepartment(slug);
-    loadProfile(slug);
+    loadProfile(slug, true);
   };
 
   const preset = presets?.[0] ?? null;

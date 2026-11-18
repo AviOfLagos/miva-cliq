@@ -73,8 +73,10 @@ export async function GET(req: NextRequest) {
         let sampleQuestions: SampleQuestion[] = [];
         if (useBank) {
           const rows = await listAnswers({ courseCode, section: w.weekNumber }).catch(() => []);
+          // Only confirmed rows: the bank accepts edits from any student, and
+          // this text ends up inside a prompt someone else pastes into a chatbot.
           sampleQuestions = rows
-            .filter((r) => r.questionText.trim())
+            .filter((r) => r.status === "confirmed" && r.questionText.trim())
             .slice(0, SAMPLES_PER_WEEK)
             .map((r) => ({ question: r.questionText }));
         }

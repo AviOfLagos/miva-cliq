@@ -2,38 +2,156 @@
 /*  Miva Cliq — global styles                                          */
 /* ================================================================== */
 
+/* ------------------------------------------------------------------ *
+ *  Design tokens
+ *
+ *  Every colour in this file comes from here. If you find yourself
+ *  typing a hex or rgba() below this block, add a token instead —
+ *  a literal is a value that can't follow the theme and can't be
+ *  audited for contrast.
+ *
+ *  The palette is deliberately small:
+ *
+ *    - A neutral ramp does the structural work (page, surfaces,
+ *      borders, three levels of text).
+ *    - ONE accent marks the primary action. If a screen shows two
+ *      accent-coloured things, one of them is wrong.
+ *    - Semantic colours (good / warn / bad) appear only where the
+ *      colour IS the information — a verified answer, a failed
+ *      course, a destructive action. Never decoration.
+ *
+ *  Anything that used to be violet-or-teal-because-it-looked-nice is
+ *  now a neutral. Hierarchy comes from type, weight, and space.
+ * ------------------------------------------------------------------ */
+
 :root {
-  --bg: #0a0b14;
-  --bg-2: #0e0f1c;
-  --surface: rgba(23, 25, 42, 0.72);
-  --surface-solid: #14162a;
-  --surface-2: rgba(31, 34, 56, 0.6);
-  --border: rgba(140, 150, 210, 0.14);
-  --border-strong: rgba(140, 150, 210, 0.28);
-  --text: #eef0fb;
-  --text-dim: #a6abce;
-  --text-faint: #6d7398;
+  color-scheme: dark;
 
-  --indigo: #6366f1;
-  --violet: #8b5cf6;
-  --teal: #2dd4bf;
+  /* Neutral ramp — structure */
+  --bg: #0b0c11;
+  --bg-2: #101219;
+  --surface: #161821;
+  --surface-solid: #161821;
+  --surface-2: #1d202b;
+  --surface-3: #262a37;
+  --border: #262a37;
+  --border-strong: #363b4c;
 
-  --good: #34d399;
+  /* Text — three levels, all AA against --bg and --surface */
+  --text: #f2f3f7;
+  --text-dim: #a8adbe;
+  --text-faint: #81879b;
+
+  /* The one accent. Indigo, because it reads as "action" without the
+     saturation of the old violet-teal gradient. */
+  --accent: #6d7cf5;
+  --accent-hover: #8390ff;
+  --accent-quiet: #1c2140; /* tinted surface for selected/active states */
+  --accent-border: #39406e;
+  --on-accent: #0b0c11; /* text on a filled accent button */
+
+  /* Semantic — used only where colour carries meaning */
+  --good: #4ade80;
+  --good-quiet: #14261c;
   --warn: #fbbf24;
+  --warn-quiet: #2a2113;
   --bad: #f87171;
+  --bad-quiet: #2d1719;
 
-  --grad: linear-gradient(120deg, #8b5cf6 0%, #6366f1 48%, #2dd4bf 100%);
-  --grad-soft: linear-gradient(120deg, rgba(139, 92, 246, 0.16), rgba(45, 212, 191, 0.16));
+  /* The single remaining gradient: the logo mark only. One mark, one
+     place, so it reads as identity rather than as decoration. */
+  --grad: linear-gradient(135deg, #6d7cf5, #a855f7);
+  --grad-soft: var(--surface-2);
 
-  --radius: 18px;
-  --radius-sm: 12px;
-  --shadow: 0 20px 50px -22px rgba(0, 0, 0, 0.75);
-  --shadow-lg: 0 30px 80px -30px rgba(76, 63, 175, 0.55);
+  /* Modal/overlay backdrop */
+  --scrim: rgba(4, 5, 8, 0.72);
 
-  --ring-focus: 0 0 0 3px rgba(139, 92, 246, 0.45);
+  --radius: 14px;
+  --radius-sm: 10px;
+  /* Neutral, low shadows. The old ones were tinted indigo, which put
+     accent colour behind every card on the page. */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -16px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.3), 0 16px 40px -24px rgba(0, 0, 0, 0.7);
+
+  --ring-focus: 0 0 0 3px rgba(109, 124, 245, 0.5);
 
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+}
+
+/* Light theme. Same token names, so every rule below inherits it for
+   free — that is the whole reason for banning literals. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --bg: #ffffff;
+    --bg-2: #f6f7f9;
+    --surface: #ffffff;
+    --surface-solid: #ffffff;
+    --surface-2: #f3f4f7;
+    --surface-3: #e8eaef;
+    --border: #e2e4ea;
+    --border-strong: #c9ccd6;
+
+    --text: #14161c;
+    --text-dim: #565c6c;
+    --text-faint: #6a7080;
+
+    --accent: #4f5bd5;
+    --accent-hover: #3f4ac0;
+    --accent-quiet: #eef0fd;
+    --accent-border: #c5cbf6;
+    --on-accent: #ffffff;
+
+    --good: #15803d;
+    --good-quiet: #eaf7ee;
+    --warn: #9f6005;
+    --warn-quiet: #fdf5e3;
+    --bad: #b91c1c;
+    --bad-quiet: #fdeded;
+
+    --shadow: 0 1px 2px rgba(16, 18, 24, 0.06), 0 8px 24px -16px rgba(16, 18, 24, 0.18);
+    --shadow-lg: 0 2px 4px rgba(16, 18, 24, 0.06), 0 16px 40px -24px rgba(16, 18, 24, 0.22);
+    --ring-focus: 0 0 0 3px rgba(79, 91, 213, 0.35);
+    --scrim: rgba(16, 18, 24, 0.45);
+  }
+}
+
+/* Explicit opt-in, for a future toggle. Kept in sync with the block above. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --bg-2: #f6f7f9;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --surface-2: #f3f4f7;
+  --surface-3: #e8eaef;
+  --border: #e2e4ea;
+  --border-strong: #c9ccd6;
+
+  --text: #14161c;
+  --text-dim: #565c6c;
+  --text-faint: #6a7080;
+
+  --accent: #4f5bd5;
+  --accent-hover: #3f4ac0;
+  --accent-quiet: #eef0fd;
+  --accent-border: #c5cbf6;
+  --on-accent: #ffffff;
+
+  --good: #15803d;
+  --good-quiet: #eaf7ee;
+  --warn: #9f6005;
+  --warn-quiet: #fdf5e3;
+  --bad: #b91c1c;
+  --bad-quiet: #fdeded;
+
+  --shadow: 0 1px 2px rgba(16, 18, 24, 0.06), 0 8px 24px -16px rgba(16, 18, 24, 0.18);
+  --shadow-lg: 0 2px 4px rgba(16, 18, 24, 0.06), 0 16px 40px -24px rgba(16, 18, 24, 0.22);
+  --ring-focus: 0 0 0 3px rgba(79, 91, 213, 0.35);
+  --scrim: rgba(16, 18, 24, 0.45);
 }
 
 * {
@@ -49,10 +167,10 @@ body {
 body {
   font-family: var(--font);
   color: var(--text);
-  background:
-    radial-gradient(1200px 700px at 80% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
-    radial-gradient(1000px 620px at 5% 110%, rgba(45, 212, 191, 0.12), transparent 55%),
-    var(--bg);
+  /* Was two large radial gradients in indigo and teal. They tinted every
+     page corner, so nothing on top could claim attention by being the only
+     coloured thing. A flat page is the baseline the accent reads against. */
+  background: var(--bg);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -64,7 +182,8 @@ button {
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.4);
+  background: var(--accent-quiet);
+  color: var(--text);
 }
 
 /* ---- layout shell ------------------------------------------------ */
@@ -77,45 +196,13 @@ button {
   overflow: hidden;
 }
 
+/* The three floating blurred orbs are gone. They were the single largest
+   source of ambient colour — violet top-right, teal bottom-left, indigo
+   through the middle — and they animated behind every screen including the
+   password field. Kept as no-op rules so the markup that renders them
+   doesn't need touching in this pass; the elements now paint nothing. */
 .bg-orbs {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.5;
-}
-
-.orb-a {
-  width: 420px;
-  height: 420px;
-  top: -120px;
-  right: -80px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.6), transparent 70%);
-  animation: float 18s ease-in-out infinite;
-}
-
-.orb-b {
-  width: 380px;
-  height: 380px;
-  bottom: -140px;
-  left: -100px;
-  background: radial-gradient(circle, rgba(45, 212, 191, 0.45), transparent 70%);
-  animation: float 22s ease-in-out infinite reverse;
-}
-
-.orb-c {
-  width: 300px;
-  height: 300px;
-  top: 40%;
-  left: 55%;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.35), transparent 70%);
-  animation: float 26s ease-in-out infinite;
+  display: none;
 }
 
 @keyframes float {
@@ -153,15 +240,15 @@ button {
   height: 34px;
   border-radius: 10px;
   background: var(--grad);
-  box-shadow: 0 8px 20px -6px rgba(139, 92, 246, 0.7);
+  box-shadow: var(--shadow);
   font-size: 1rem;
 }
 
+/* Plain text, not gradient-filled. The mark beside it already carries the
+   brand colour; doing it twice made the wordmark compete with the page's
+   actual primary action. Gradient text also can't be contrast-checked. */
 .brand-name {
-  background: var(--grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text);
 }
 
 .topbar-user {
@@ -181,10 +268,10 @@ button {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: var(--grad);
+  background: var(--accent);
   font-weight: 700;
   font-size: 0.85rem;
-  color: #fff;
+  color: var(--on-accent);
   flex-shrink: 0;
 }
 
@@ -300,19 +387,22 @@ button {
   box-shadow: var(--ring-focus);
 }
 
+/* The one filled-accent element on a screen. Solid fill, no coloured glow —
+   the glow was doing the work the fill should do, and it made the button
+   look lit rather than clickable. */
 .btn-primary {
-  background: var(--grad);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
-  box-shadow: 0 12px 30px -12px rgba(99, 102, 241, 0.8);
+  font-weight: 600;
 }
 
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 16px 40px -12px rgba(99, 102, 241, 0.95);
+  background: var(--accent-hover);
 }
 
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text-dim);
 }
@@ -339,7 +429,7 @@ button {
   height: 36px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-2);
   color: var(--text-dim);
   cursor: pointer;
   font-size: 0.85rem;
@@ -350,7 +440,7 @@ button {
 .icon-btn:hover {
   color: var(--text);
   border-color: var(--border-strong);
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--surface-3);
 }
 
 .icon-btn:focus-visible {
@@ -369,8 +459,8 @@ button {
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--on-accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   display: inline-block;
@@ -386,8 +476,8 @@ button {
   width: 34px;
   height: 34px;
   border-width: 3px;
-  border-color: rgba(139, 92, 246, 0.25);
-  border-top-color: var(--violet);
+  border-color: var(--accent-border);
+  border-top-color: var(--accent);
 }
 
 @keyframes spin {
@@ -408,15 +498,15 @@ button {
 }
 
 .alert-error {
-  background: rgba(248, 113, 113, 0.12);
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  color: #fecaca;
+  background: var(--bad-quiet);
+  border: 1px solid var(--bad);
+  color: var(--bad);
 }
 
 .alert-notice {
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.35);
-  color: #c7d2fe;
+  background: var(--accent-quiet);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
 }
 
 .alert .btn {
@@ -434,15 +524,15 @@ button {
 }
 
 .badge-preset {
-  color: #c4b5fd;
-  background: rgba(139, 92, 246, 0.16);
-  border: 1px solid rgba(139, 92, 246, 0.4);
+  color: var(--accent);
+  background: var(--accent-quiet);
+  border: 1px solid var(--accent-border);
 }
 
 .badge-custom {
-  color: #99f6e4;
-  background: rgba(45, 212, 191, 0.14);
-  border: 1px solid rgba(45, 212, 191, 0.4);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
 }
 
 .pill {
@@ -457,7 +547,7 @@ button {
 }
 
 .pill-ghost {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-2);
   color: var(--text-dim);
 }
 
@@ -499,9 +589,9 @@ button {
   border-radius: 6px;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.05),
-    rgba(255, 255, 255, 0.12),
-    rgba(255, 255, 255, 0.05)
+    var(--surface-3),
+    var(--border),
+    var(--surface-3)
   );
   background-size: 200% 100%;
   animation: shimmer 1.3s linear infinite;
@@ -576,7 +666,7 @@ button {
   border-radius: 18px;
   background: var(--grad);
   font-size: 1.7rem;
-  box-shadow: 0 16px 40px -14px rgba(139, 92, 246, 0.8);
+  box-shadow: var(--shadow-lg);
   margin-bottom: 16px;
 }
 
@@ -584,10 +674,10 @@ button {
   margin: 0;
   font-size: 2rem;
   letter-spacing: -0.03em;
-  background: var(--grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  /* Plain text. On the one screen where someone decides whether to trust us
+     with an LMS password, the primary action should be the most prominent
+     thing — not the title above it. */
+  color: var(--text);
 }
 
 .login-tagline {
@@ -623,7 +713,7 @@ input[type="search"] {
   padding: 13px 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: rgba(10, 11, 22, 0.6);
+  background: var(--surface-2);
   color: var(--text);
   font-size: 0.95rem;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
@@ -635,9 +725,9 @@ input::placeholder {
 
 input:focus {
   outline: none;
-  border-color: rgba(139, 92, 246, 0.6);
+  border-color: var(--accent);
   box-shadow: var(--ring-focus);
-  background: rgba(10, 11, 22, 0.85);
+  background: var(--surface-2);
 }
 
 input:disabled {
@@ -670,7 +760,7 @@ input:disabled {
 
 .pw-toggle:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-3);
 }
 
 .pw-toggle:focus-visible {
@@ -811,7 +901,7 @@ input:disabled {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(6, 7, 15, 0.7);
+  background: var(--scrim);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   display: grid;
@@ -827,7 +917,7 @@ input:disabled {
   background: var(--surface-solid);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  box-shadow: 0 40px 100px -30px rgba(0, 0, 0, 0.85);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
@@ -892,8 +982,8 @@ input:disabled {
   width: 24px;
   height: 24px;
   border-radius: 7px;
-  background: var(--grad);
-  color: #fff;
+  background: var(--surface-3);
+  color: var(--on-accent);
   font-size: 0.75rem;
   font-weight: 700;
   flex-shrink: 0;
@@ -959,19 +1049,19 @@ input:disabled {
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface-2);
   cursor: pointer;
   transition: border-color 0.18s, background 0.18s;
 }
 
 .check-row:hover {
   border-color: var(--border-strong);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-3);
 }
 
 .check-row.is-checked {
-  border-color: rgba(139, 92, 246, 0.5);
-  background: rgba(139, 92, 246, 0.1);
+  border-color: var(--accent);
+  background: var(--accent-quiet);
 }
 
 .check-row input {
@@ -988,7 +1078,7 @@ input:disabled {
   height: 22px;
   border-radius: 7px;
   border: 1.5px solid var(--border-strong);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 0.8rem;
   font-weight: 700;
   flex-shrink: 0;
@@ -996,7 +1086,7 @@ input:disabled {
 }
 
 .check-row.is-checked .checkbox {
-  background: var(--grad);
+  background: var(--accent);
   border-color: transparent;
 }
 
@@ -1073,12 +1163,12 @@ input:disabled {
 }
 
 .ring-bg {
-  stroke: rgba(255, 255, 255, 0.08);
+  stroke: var(--surface-3);
 }
 
 .ring-fg {
   transition: stroke-dashoffset 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-  filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.4));
+  filter: none;
 }
 
 .ring-center {
@@ -1131,20 +1221,20 @@ input:disabled {
 
 .chip-good {
   color: var(--good);
-  background: rgba(52, 211, 153, 0.1);
-  border-color: rgba(52, 211, 153, 0.3);
+  background: var(--good-quiet);
+  border-color: var(--good);
 }
 
 .chip-warn {
   color: var(--warn);
-  background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.3);
+  background: var(--warn-quiet);
+  border-color: var(--warn);
 }
 
 .chip-bad {
   color: var(--bad);
-  background: rgba(248, 113, 113, 0.1);
-  border-color: rgba(248, 113, 113, 0.3);
+  background: var(--bad-quiet);
+  border-color: var(--bad);
 }
 
 /* live log */
@@ -1172,16 +1262,16 @@ input:disabled {
   height: 8px;
   border-radius: 50%;
   background: var(--good);
-  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6);
+  box-shadow: 0 0 0 0 var(--good);
   animation: pulse 1.6s ease-out infinite;
 }
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+    box-shadow: 0 0 0 0 var(--good);
   }
   100% {
-    box-shadow: 0 0 0 10px rgba(52, 211, 153, 0);
+    box-shadow: 0 0 0 10px transparent;
   }
 }
 
@@ -1199,7 +1289,7 @@ input:disabled {
 .log-line {
   padding: 3px 0;
   color: var(--text-dim);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--surface-2);
   animation: fadeIn 0.3s ease both;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1211,13 +1301,13 @@ input:disabled {
 }
 
 .log-good {
-  color: #8ff0c6;
+  color: var(--good);
 }
 .log-warn {
-  color: #ffd982;
+  color: var(--warn);
 }
 .log-bad {
-  color: #ffb0b0;
+  color: var(--bad);
 }
 .log-info {
   color: var(--text-dim);
@@ -1237,12 +1327,12 @@ input:disabled {
 }
 
 .course-row.is-active {
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.25), var(--shadow);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-border), var(--shadow);
 }
 
 .course-row.is-complete {
-  border-color: rgba(52, 211, 153, 0.28);
+  border-color: var(--good-quiet);
 }
 
 .course-row-head {
@@ -1260,7 +1350,7 @@ input:disabled {
 }
 
 .course-row-head:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-2);
 }
 
 .course-row-head:focus-visible {
@@ -1303,21 +1393,21 @@ input:disabled {
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-3);
   border: 1px solid var(--border);
   color: var(--text-dim);
 }
 
 .tag-active {
-  color: #c4b5fd;
-  border-color: rgba(139, 92, 246, 0.4);
-  background: rgba(139, 92, 246, 0.12);
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-quiet);
 }
 
 .tag-done {
   color: var(--good);
-  border-color: rgba(52, 211, 153, 0.35);
-  background: rgba(52, 211, 153, 0.12);
+  border-color: var(--good);
+  background: var(--good-quiet);
 }
 
 .count-badge {
@@ -1331,19 +1421,19 @@ input:disabled {
 
 .progress-track {
   height: 5px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-3);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: var(--grad);
+  background: var(--accent);
   border-radius: 0 3px 3px 0;
   transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .progress-fill.fill-done {
-  background: linear-gradient(90deg, #34d399, #2dd4bf);
+  background: linear-gradient(90deg, var(--good), var(--text-dim));
 }
 
 .activity-list {
@@ -1366,7 +1456,7 @@ input:disabled {
 }
 
 .activity-item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-2);
 }
 
 .activity-empty {
@@ -1388,28 +1478,28 @@ input:disabled {
 }
 
 .st-pending {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-3);
   border: 1.5px solid var(--border-strong);
   color: transparent;
 }
 
 .st-good {
-  background: rgba(52, 211, 153, 0.18);
+  background: var(--good-quiet);
   color: var(--good);
-  border: 1px solid rgba(52, 211, 153, 0.4);
+  border: 1px solid var(--good);
   animation: popIn 0.3s ease both;
 }
 
 .st-skip {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-3);
   color: var(--text-faint);
   border: 1px solid var(--border);
 }
 
 .st-bad {
-  background: rgba(248, 113, 113, 0.16);
+  background: var(--bad-quiet);
   color: var(--bad);
-  border: 1px solid rgba(248, 113, 113, 0.4);
+  border: 1px solid var(--bad);
   animation: popIn 0.3s ease both;
 }
 
@@ -1431,7 +1521,7 @@ input:disabled {
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-3);
   border: 1px solid var(--border);
   color: var(--text-dim);
   white-space: nowrap;
@@ -1506,14 +1596,14 @@ input:disabled {
   margin-bottom: 22px;
   padding: 16px;
   border-radius: 14px;
-  background: rgba(248, 113, 113, 0.07);
-  border: 1px solid rgba(248, 113, 113, 0.25);
+  background: var(--bad-quiet);
+  border: 1px solid var(--bad-quiet);
 }
 
 .failures-title {
   margin: 0 0 10px;
   font-size: 0.9rem;
-  color: #fecaca;
+  color: var(--bad);
 }
 
 .failures-list {
@@ -1721,7 +1811,7 @@ input:disabled {
 
 .activity-link:hover,
 .activity-link:focus-visible {
-  color: var(--indigo);
+  color: var(--accent);
   text-decoration: underline;
 }
 
@@ -1793,7 +1883,7 @@ input:disabled {
 
 .run-pill:hover,
 .run-pill:focus-visible {
-  border-color: var(--violet);
+  border-color: var(--accent);
   color: var(--text);
 }
 
@@ -1801,7 +1891,7 @@ input:disabled {
   width: 64px;
   height: 5px;
   border-radius: 999px;
-  background: rgba(140, 150, 210, 0.18);
+  background: var(--border);
   overflow: hidden;
 }
 
@@ -1809,7 +1899,7 @@ input:disabled {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: var(--grad);
+  background: var(--accent);
   transition: width 0.4s ease;
 }
 
@@ -1946,7 +2036,7 @@ input:disabled {
   padding: 12px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: rgba(10, 11, 20, 0.6);
+  background: var(--surface-2);
   color: var(--text);
   font: inherit;
   font-size: 0.95rem;
@@ -1954,7 +2044,7 @@ input:disabled {
 
 .gist-textarea:focus-visible {
   outline: none;
-  border-color: var(--violet);
+  border-color: var(--accent);
   box-shadow: var(--ring-focus);
 }
 
@@ -2283,7 +2373,7 @@ input:disabled {
   padding: 9px 11px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: rgba(10, 11, 20, 0.6);
+  background: var(--surface-2);
   color: var(--text);
   font: inherit;
   font-size: 0.9rem;
@@ -2292,7 +2382,7 @@ input:disabled {
 .composer-field select:focus-visible,
 .composer-field input:focus-visible {
   outline: none;
-  border-color: var(--violet);
+  border-color: var(--accent);
   box-shadow: var(--ring-focus);
 }
 
@@ -2300,8 +2390,8 @@ input:disabled {
   margin: 0;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.3);
+  background: var(--warn-quiet);
+  border: 1px solid var(--warn);
   color: var(--warn);
   font-size: 0.8rem;
 }
@@ -2345,7 +2435,7 @@ input:disabled {
 .event-when {
   font-size: 0.78rem;
   font-weight: 700;
-  color: var(--teal);
+  color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2521,7 +2611,7 @@ input:disabled {
   border-radius: 6px;
   border: 1.5px solid var(--border-strong);
   background: var(--surface-2);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 0.85rem;
   font-weight: 700;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -2529,7 +2619,7 @@ input:disabled {
 }
 
 .consent-check input:checked + .consent-box {
-  background: var(--grad);
+  background: var(--accent);
   border-color: transparent;
 }
 
@@ -2544,25 +2634,29 @@ input:disabled {
 }
 
 /* primary nav CTA — the Autopilot tool, far right */
+/* Outlined, not filled. This sits in the nav on every page, so filling it
+   with the accent meant it competed with each page's own primary action —
+   including "Log in" on the login screen. An outline still reads as the
+   nav's most important link without outranking the page. */
 .nav-cta {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 9px 18px;
   border-radius: 999px;
-  background: var(--grad);
-  color: #fff;
-  font-weight: 700;
+  background: transparent;
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-weight: 600;
   font-size: 0.9rem;
   text-decoration: none;
   white-space: nowrap;
-  box-shadow: 0 10px 26px -10px rgba(99, 102, 241, 0.85);
-  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .nav-cta:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 34px -10px rgba(99, 102, 241, 1);
+  background: var(--accent-quiet);
+  border-color: var(--accent);
 }
 
 .nav-cta:focus-visible {
@@ -2570,10 +2664,11 @@ input:disabled {
   box-shadow: var(--ring-focus);
 }
 
+/* "You are here" is a fill, not a glow. The dropped shadow was the last
+   coloured halo in the nav. */
 .nav-cta.is-current {
-  box-shadow:
-    inset 0 0 0 2px rgba(255, 255, 255, 0.5),
-    0 10px 26px -12px rgba(99, 102, 241, 0.7);
+  background: var(--accent-quiet);
+  border-color: var(--accent);
 }
 
 .nav-cta-icon {
@@ -2589,7 +2684,7 @@ input:disabled {
 /* ---- identity: username prompt, toggle, author labels ------------ */
 
 .gist-author-named {
-  color: var(--violet);
+  color: var(--accent);
   font-weight: 700;
 }
 
@@ -2644,11 +2739,11 @@ input:disabled {
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: rgba(10, 11, 20, 0.6);
+  background: var(--surface-2);
 }
 
 .username-field:focus-within {
-  border-color: var(--violet);
+  border-color: var(--accent);
   box-shadow: var(--ring-focus);
 }
 
@@ -2724,14 +2819,14 @@ input:disabled {
   margin-bottom: 8px;
 }
 .pill-good {
-  background: rgba(52, 211, 153, 0.12);
-  border-color: rgba(52, 211, 153, 0.4);
-  color: #34d399;
+  background: var(--good-quiet);
+  border-color: var(--good);
+  color: var(--good);
 }
 .pill-warn {
-  background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.35);
-  color: #fbbf24;
+  background: var(--warn-quiet);
+  border-color: var(--warn);
+  color: var(--warn);
 }
 .answer-question {
   margin: 0 0 10px;
@@ -2742,8 +2837,8 @@ input:disabled {
   margin: 0 0 10px;
   padding: 8px 12px;
   border-radius: 10px;
-  background: rgba(139, 92, 246, 0.08);
-  border: 1px solid rgba(139, 92, 246, 0.25);
+  background: var(--accent-quiet);
+  border: 1px solid var(--accent-border);
 }
 .answer-value-label {
   font-weight: 700;
@@ -2784,8 +2879,8 @@ input:disabled {
 }
 
 .pack-card.is-selected {
-  border-color: rgba(139, 92, 246, 0.55);
-  background: rgba(139, 92, 246, 0.08);
+  border-color: var(--accent);
+  background: var(--accent-quiet);
 }
 
 .pack-actions {

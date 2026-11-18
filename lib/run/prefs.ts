@@ -62,6 +62,29 @@ export function saveAnswerQuizzes(email: string, on: boolean): void {
 }
 
 /**
+ * The one-time "Want a study plan for your courses?" ask. Per device, not per
+ * user: once answered (either way) on this phone, it never shows again.
+ */
+const STUDY_ASK_KEY = "miva-cliq-study-ask";
+
+export function loadStudyAskDone(): boolean {
+  try {
+    return localStorage.getItem(STUDY_ASK_KEY) === "1";
+  } catch {
+    // No storage (privacy mode): treat as answered rather than nag on every page.
+    return true;
+  }
+}
+
+export function saveStudyAskDone(): void {
+  try {
+    localStorage.setItem(STUDY_ASK_KEY, "1");
+  } catch {
+    /* ignore quota / privacy mode */
+  }
+}
+
+/**
  * The student's confirmed department (a lib/taxonomy.ts slug). Asked once on
  * the Autopilot screen, prefilled from course codes; "" means not confirmed.
  */

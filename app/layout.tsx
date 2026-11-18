@@ -3,6 +3,7 @@ import "./globals.css";
 import { AppProvider } from "@/lib/run/AppContext";
 import TopBar from "./components/TopBar";
 import Footer from "./components/Footer";
+import StudyAsk from "./components/StudyAsk";
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -66,7 +67,10 @@ export default function RootLayout({
             </div>
 
             <TopBar />
-            <div className="stage">{children}</div>
+            <div className="stage">
+              <StudyAsk />
+              {children}
+            </div>
             <Footer />
           </main>
         </AppProvider>

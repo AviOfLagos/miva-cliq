@@ -1,7 +1,4 @@
-// Run with: node --test lib/study/prompts.test.mts
-// .mts so the repo's tsconfig `include` ("**/*.ts") does not reach it: the
-// `.ts` extension in the import below would otherwise need
-// `allowImportingTsExtensions`, and tsconfig.json is off-limits here.
+// Run with: npm test (or node --test lib/study/prompts.test.ts)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

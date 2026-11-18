@@ -84,6 +84,28 @@ export function saveStudyAskDone(): void {
   }
 }
 
+/**
+ * The student's confirmed department (a lib/taxonomy.ts slug). Asked once on
+ * the Autopilot screen, prefilled from course codes; "" means not confirmed.
+ */
+const DEPARTMENT_PREFIX = "miva-cliq-department:";
+
+export function loadDepartment(email: string): string {
+  try {
+    return localStorage.getItem(DEPARTMENT_PREFIX + (email || "anon").toLowerCase()) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveDepartment(email: string, slug: string): void {
+  try {
+    localStorage.setItem(DEPARTMENT_PREFIX + (email || "anon").toLowerCase(), slug);
+  } catch {
+    /* ignore quota / privacy mode */
+  }
+}
+
 /** Clean a raw multiline textarea into a de-duped list of non-empty lines. */
 export function parseForumTexts(raw: string): string[] {
   const seen = new Set<string>();

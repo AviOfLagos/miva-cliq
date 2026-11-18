@@ -95,8 +95,8 @@ CREATE TABLE IF NOT EXISTS reports (
 -- reason about than a fixed window, and old rows are pruned on write.
 CREATE TABLE IF NOT EXISTS rate_events (
   id          BIGSERIAL PRIMARY KEY,
-  actor       TEXT        NOT NULL,   -- author_hash or ip:<addr>
-  kind        TEXT        NOT NULL,   -- 'gist' | 'reply' | 'event'
+  actor       TEXT        NOT NULL,   -- author_hash, ip:<addr>, or acct:<hash>
+  kind        TEXT        NOT NULL,   -- 'gist' | 'reply' | 'event' | 'quiz-edit' | 'login'
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -147,3 +147,39 @@ CREATE TABLE IF NOT EXISTS quiz_answers (
 
 CREATE INDEX IF NOT EXISTS quiz_answers_browse_idx
   ON quiz_answers (course_code, section);
+-- Completion telemetry: daily counters of what the engine did, by activity type,
+-- outcome and reason key (e.g. page/done/marked, url/done/viewed,
+-- h5pactivity/failed/needs-score, lesson/failed/locked). No user, course or
+-- activity identity — only aggregate counts. This is how we notice when the LMS
+-- changes. Written once per /api/run pass (lib/store/completionStats.ts).
+CREATE TABLE IF NOT EXISTS completion_outcomes (
+  day      DATE    NOT NULL DEFAULT CURRENT_DATE,
+  modname  TEXT    NOT NULL,
+  outcome  TEXT    NOT NULL,            -- done | already | skipped | failed
+  reason   TEXT    NOT NULL DEFAULT '', -- see Reason in lib/completion/types.ts
+  n        BIGINT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, modname, outcome, reason)
+);
+
+
+-- Self-building curriculum. One row per (department, level, semester, course
+-- code, student), where "student" is the same salted HMAC used for Gists
+-- (lib/store/authorHash.ts) and never an email, a name or a Moodle user id.
+-- The per-student row is what makes counts distinct: a student who logs in
+-- twenty times still counts once. The recommended package for a department,
+-- level and semester is the codes a clear majority of those distinct students
+-- share (lib/level/package.ts). Recorded only once a department is known. A
+-- student's rows for that level and semester are replaced on each record, so a
+-- dropped course or a corrected department does not linger.
+CREATE TABLE IF NOT EXISTS curriculum (
+  department   TEXT        NOT NULL,   -- validated slug from lib/taxonomy.ts
+  level        INT         NOT NULL,   -- 100, 200, ...
+  semester     TEXT        NOT NULL,   -- first | second
+  course_code  TEXT        NOT NULL,   -- display form, e.g. COS 202
+  author_hash  TEXT        NOT NULL,
+  seen_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (department, level, semester, course_code, author_hash)
+);
+
+CREATE INDEX IF NOT EXISTS curriculum_student_idx
+  ON curriculum (author_hash, level, semester);

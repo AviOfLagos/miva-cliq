@@ -15,9 +15,16 @@ export const aiQuizAnswer: Strategy = {
   name: "aiQuizAnswer",
   action: "quiz",
   detect: (a) => a.modname === "quiz",
+  // Attempts make their own requests (and AI calls): run last, under the budget.
+  // With the toggle off it is an instant skip.
+  slow: (_a, ctx) => ctx.answerQuizzes,
   run: async (a, ctx) => {
     if (!ctx.answerQuizzes) {
-      return { outcome: "skipped", detail: "quiz — enable weekly quizzes to attempt" };
+      return {
+        outcome: "skipped",
+        reason: "quiz-off",
+        detail: "quiz — enable weekly quizzes to attempt",
+      };
     }
     const year = new Date().getFullYear();
     const res = await answerQuiz(ctx.session, ctx.courseId, a, {
@@ -27,8 +34,12 @@ export const aiQuizAnswer: Strategy = {
     // "partial" (some blank / non-MCQ present) still counts as done for the run
     // summary; the detail carries the breakdown.
     if (res.outcome === "partial") {
-      return { outcome: "done", detail: res.detail };
+      return { outcome: "done", reason: "quiz", detail: res.detail };
     }
-    return { outcome: res.outcome, detail: res.detail };
+    return {
+      outcome: res.outcome,
+      reason: res.outcome === "done" ? "quiz" : res.outcome === "skipped" ? "quiz-skipped" : "quiz-failed",
+      detail: res.detail,
+    };
   },
 };

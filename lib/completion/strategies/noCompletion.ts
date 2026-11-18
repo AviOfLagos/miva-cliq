@@ -8,5 +8,9 @@ export const noCompletion: Strategy = {
   name: "noCompletion",
   action: "skip-none",
   detect: (a) => a.completionstate === null,
-  run: async () => ({ outcome: "skipped", detail: "no completion required" }),
+  run: async () => ({
+    outcome: "skipped",
+    reason: "no-tracking",
+    detail: "no completion required",
+  }),
 };

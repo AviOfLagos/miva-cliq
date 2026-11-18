@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:push": "node db/push.mjs",
-    "test": "node --test 'lib/**/*.test.ts' 'app/**/*.test.ts' 'test/**/*.test.ts'"
+    "test": "node --import ./test/register.mjs --test 'lib/**/*.test.ts' 'app/**/*.test.ts' 'test/**/*.test.ts'",
+    "db:push": "node db/push.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

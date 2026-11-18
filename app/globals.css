@@ -2793,3 +2793,36 @@ input:disabled {
   gap: 14px;
   margin-top: 18px;
 }
+
+/* --- Study prompts ------------------------------------------------------- */
+
+.study-ask {
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+
+.study-ask-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.study-week-title {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+
+.study-topics {
+  margin: 4px 0 12px;
+  padding-left: 20px;
+  font-size: 0.92rem;
+}
+
+.study-prompt {
+  margin-top: 8px;
+  max-height: 14em;
+  overflow: auto;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}

@@ -47,6 +47,8 @@ export default function Footer() {
         </div>
       ) : null}
       <nav className="footer-links" aria-label="Legal and info">
+        {/* The top nav links are hidden on phones; this keeps Study reachable there. */}
+        <Link href="/study">Study</Link>
         <Link href="/terms">Terms</Link>
         <Link href="/privacy">Privacy</Link>
         <Link href="/disclaimer">Disclaimer</Link>

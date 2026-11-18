@@ -9,17 +9,40 @@ export interface Course {
   fullname: string;
 }
 
-export async function listCourses(session: MoodleSession): Promise<Course[]> {
+/** Moodle's timeline classifications. "inprogress" is this term's courses. */
+export type Classification = "all" | "inprogress" | "future" | "past";
+
+export async function listCourses(
+  session: MoodleSession,
+  classification: Classification = "all",
+): Promise<Course[]> {
   const res = await ajax(
     session,
     "core_course_get_enrolled_courses_by_timeline_classification",
-    { classification: "all", limit: 0, offset: 0, sort: "fullname" },
+    { classification, limit: 0, offset: 0, sort: "fullname" },
   );
   if (res.error) {
     throw new Error(res.exception?.message || "Could not list courses.");
   }
   const courses = (res.data?.courses || []) as Array<{ id: number; fullname: string }>;
   return courses.map((c) => ({ id: c.id, fullname: c.fullname }));
+}
+
+/**
+ * This semester's courses: the "inprogress" classification, falling back to
+ * "all" when it errors or comes back empty (courses with no dates set, or an
+ * LMS that classifies differently). `source` says which one answered.
+ */
+export async function listCurrentCourses(
+  session: MoodleSession,
+): Promise<{ courses: Course[]; source: "inprogress" | "all" }> {
+  try {
+    const current = await listCourses(session, "inprogress");
+    if (current.length) return { courses: current, source: "inprogress" };
+  } catch {
+    /* fall through to "all" */
+  }
+  return { courses: await listCourses(session, "all"), source: "all" };
 }
 
 /** Normalise a course title for fuzzy matching (drop spaces/punctuation, lowercase). */

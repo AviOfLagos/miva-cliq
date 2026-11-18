@@ -108,6 +108,9 @@ export default function PrivacyPage() {
         <p className="doc-body">
           {`We may keep simple aggregate counts — such as how many people have used the Service and how many runs have happened — to understand usage. These are counts, not records about you, and unique users are counted using a one-way hash rather than any readable identifier.`}
         </p>
+        <p className="doc-body">
+          {`Once you confirm your department on the Autopilot screen, we record which course codes you're enrolled in at your level and semester, keyed to the same one-way hash, so we can show which courses most students in your department and level take. We store the department, level, semester and course codes — never your name, email or Moodle user id. Your department choice itself is remembered only in your browser.`}
+        </p>
       </div>
 
       <div className="card doc-card">

@@ -77,6 +77,12 @@ Every progress event carries a `reason` key (`marked`, `viewed`, `locked`,
 `completion_outcomes`: daily counters by activity type, outcome and reason, with
 no user identity. That table is how we notice when the LMS changes.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the PR flow, and the two rules
+that aren't negotiable: graded work is never touched, and no identifying data is
+ever stored.
+
 ## Adding a completion method
 
 The LMS will change, or a new activity type will appear. To handle it:

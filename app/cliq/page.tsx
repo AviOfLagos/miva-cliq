@@ -1,10 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import Link from "next/link";
 import { useApp } from "@/lib/run/AppContext";
 import { loadHistory, latestPerCourse } from "@/lib/run/history";
-import { parseForumTexts, DEFAULT_FORUM_TEXTS } from "@/lib/run/prefs";
+import {
+  parseForumTexts,
+  DEFAULT_FORUM_TEXTS,
+  loadDepartment,
+  saveDepartment,
+} from "@/lib/run/prefs";
+import { departmentsBySchool, departmentLabel, isDepartment } from "@/lib/taxonomy";
 import { mivaCourseUrl, timeAgo } from "@/lib/format";
 import {
   TERMS_VERSION,
@@ -280,8 +293,12 @@ function LoginScreen() {
 /* ------------------------------------------------------------------ */
 
 function ChooseScreen() {
-  const { name, email, setScreen, startRun } = useApp();
+  const { name, email, setScreen, startRun, onSessionExpired } = useApp();
   const [presets, setPresets] = useState<Preset[] | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [department, setDepartment] = useState("");
+  const [autoOpen, setAutoOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -314,7 +331,58 @@ function ChooseScreen() {
     loadPresets();
   }, [loadPresets]);
 
+  // Detect level/semester from this semester's courses. GET is read-only (the
+  // stored department only selects package notes); confirming a department is
+  // a POST, which is what records the curriculum.
+  const loadProfile = useCallback(
+    async (dept: string, confirm = false) => {
+      try {
+        const res = confirm
+          ? await fetch("/api/profile", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ department: dept }),
+            })
+          : await fetch(
+              `/api/profile${dept ? `?department=${encodeURIComponent(dept)}` : ""}`,
+              { credentials: "include" },
+            );
+        if (res.status === 401) {
+          onSessionExpired();
+          return;
+        }
+        const data = await res.json().catch(() => null);
+        // A failed refresh keeps what we had; with nothing, the preset is the fallback.
+        if (res.ok && data) setProfile(data as Profile);
+      } catch {
+        /* keep the previous profile, if any */
+      } finally {
+        setProfileLoading(false);
+      }
+    },
+    [onSessionExpired],
+  );
+
+  useEffect(() => {
+    const stored = loadDepartment(email);
+    const dept = isDepartment(stored) ? stored : "";
+    setDepartment(dept);
+    loadProfile(dept);
+  }, [email, loadProfile]);
+
+  const confirmDepartment = (slug: string) => {
+    if (!isDepartment(slug)) return;
+    saveDepartment(email, slug);
+    setDepartment(slug);
+    loadProfile(slug, true);
+  };
+
   const preset = presets?.[0] ?? null;
+  const detected =
+    profile && profile.level && profile.selectedIds.length > 0 ? profile : null;
+  // The old preset only appears when detection found nothing.
+  const showPreset = !profileLoading && !detected;
 
   return (
     <section className="fade-in choose-wrap" aria-labelledby="choose-title">
@@ -331,7 +399,50 @@ function ChooseScreen() {
       </div>
 
       <div className="choose-grid">
-        {/* Preset card */}
+        {/* Your courses this semester (detected) */}
+        {!showPreset && (
+          <button
+            type="button"
+            className="select-card"
+            onClick={() => detected && setAutoOpen(true)}
+            disabled={!detected}
+            aria-label={
+              detected
+                ? `Your courses this semester: ${profileSummary(detected)}`
+                : "Detecting your courses"
+            }
+          >
+            <div className="select-card-top">
+              <span className="badge badge-preset">THIS SEMESTER</span>
+              <span className="card-emoji" aria-hidden="true">
+                🎯
+              </span>
+            </div>
+            {!detected ? (
+              <div className="skeleton-lines">
+                <span className="skeleton w-70" />
+                <span className="skeleton w-40" />
+              </div>
+            ) : (
+              <>
+                <h3 className="select-card-title">Your courses this semester</h3>
+                <p className="select-card-sub">{profileSummary(detected)}</p>
+                <div className="select-card-foot">
+                  <span className="pill">
+                    {detected.selectedIds.length}{" "}
+                    {detected.selectedIds.length === 1 ? "course" : "courses"}
+                  </span>
+                  <span className="go-hint">
+                    Review <span aria-hidden="true">→</span>
+                  </span>
+                </div>
+              </>
+            )}
+          </button>
+        )}
+
+        {/* Preset card: fallback when detection finds nothing */}
+        {showPreset && (
         <button
           type="button"
           className="select-card"
@@ -372,6 +483,7 @@ function ChooseScreen() {
             <p className="select-card-sub">No preset available.</p>
           )}
         </button>
+        )}
 
         {/* Custom card */}
         <button
@@ -397,7 +509,7 @@ function ChooseScreen() {
         </button>
       </div>
 
-      {error && (
+      {showPreset && error && (
         <div className="alert alert-error" role="alert">
           <span aria-hidden="true">⚠️</span>
           <span>{error}</span>
@@ -456,6 +568,19 @@ function ChooseScreen() {
 
       <ForumTextsEditor />
       <QuizToggle />
+
+      {autoOpen && detected && (
+        <AutoModal
+          profile={detected}
+          department={department}
+          onConfirmDepartment={confirmDepartment}
+          onClose={() => setAutoOpen(false)}
+          onStart={(courseIds) => {
+            setAutoOpen(false);
+            startRun({ mode: "custom", courseIds });
+          }}
+        />
+      )}
 
       {modalOpen && preset && (
         <PresetModal
@@ -585,30 +710,28 @@ function QuizToggle() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Preset modal (focus trapped)                                       */
+/* Modal focus trap (shared by the preset and this-semester modals)   */
 /* ------------------------------------------------------------------ */
 
-function PresetModal({
-  preset,
-  onClose,
-  onConfirm,
-}: {
-  preset: Preset;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null);
+function useModalTrap(
+  dialogRef: RefObject<HTMLDivElement>,
+  initialFocusRef: RefObject<HTMLElement>,
+  onClose: () => void,
+) {
+  // Callers pass inline closures; a ref keeps a parent re-render from
+  // re-running the effect and yanking focus back to the initial button.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
 
   useEffect(() => {
-    confirmRef.current?.focus();
+    initialFocusRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        closeRef.current();
       } else if (e.key === "Tab") {
         const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(
-          'button, [href], input, [tabindex]:not([tabindex="-1"])',
+          'button:not(:disabled), [href], input, select, [tabindex]:not([tabindex="-1"])',
         );
         if (!focusables || focusables.length === 0) return;
         const first = focusables[0];
@@ -629,7 +752,230 @@ function PresetModal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [onClose]);
+  }, [dialogRef, initialFocusRef]);
+}
+
+/* ------------------------------------------------------------------ */
+/* "Your courses this semester" (detected level, pre-selected)        */
+/* ------------------------------------------------------------------ */
+
+/** Shape of GET /api/profile. */
+type Profile = {
+  level: number | null;
+  semester: "first" | "second" | null;
+  department: string | null;
+  departmentSource: "override" | "courses" | "none";
+  courses: { id: number; fullname: string; code: string | null; level: number | null }[];
+  selectedIds: number[];
+  notes: string[];
+};
+
+const DEPT_GROUPS = departmentsBySchool();
+
+function profileSummary(p: Profile): string {
+  const parts = [`${p.level} level`];
+  if (p.semester) parts.push(p.semester === "first" ? "First semester" : "Second semester");
+  return parts.join(" · ");
+}
+
+function AutoModal({
+  profile,
+  department,
+  onConfirmDepartment,
+  onClose,
+  onStart,
+}: {
+  profile: Profile;
+  /** Confirmed slug from localStorage, or "" if never confirmed. */
+  department: string;
+  onConfirmDepartment: (slug: string) => void;
+  onClose: () => void;
+  onStart: (courseIds: number[]) => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const startRef = useRef<HTMLButtonElement>(null);
+  useModalTrap(dialogRef, startRef, onClose);
+
+  const [selected, setSelected] = useState<Set<number>>(
+    () => new Set(profile.selectedIds),
+  );
+  const [editingDept, setEditingDept] = useState(!department);
+  const [draftDept, setDraftDept] = useState(department || profile.department || "");
+
+  const toggle = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // Pre-selected (detected level) first, then carry-overs and uncoded courses.
+  const ordered = useMemo(() => {
+    const pre = new Set(profile.selectedIds);
+    return [
+      ...profile.courses.filter((c) => pre.has(c.id)),
+      ...profile.courses.filter((c) => !pre.has(c.id)),
+    ];
+  }, [profile]);
+
+  return (
+    <div
+      className="modal-backdrop fade-in"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="modal pop-in"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auto-modal-title"
+        ref={dialogRef}
+      >
+        <div className="modal-head">
+          <div>
+            <span className="badge badge-preset">THIS SEMESTER</span>
+            <h3 id="auto-modal-title" className="modal-title">
+              Your courses this semester
+            </h3>
+            <p className="modal-sub">
+              {profileSummary(profile)}
+              {department ? ` · ${departmentLabel(department)}` : ""}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onClose}
+            aria-label="Close course preview"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="modal-body">
+          {editingDept ? (
+            <div className="composer-fields">
+              <label className="composer-field">
+                <span className="composer-label">Confirm your department</span>
+                <select
+                  value={draftDept}
+                  onChange={(e) => setDraftDept(e.target.value)}
+                >
+                  <option value="">— choose —</option>
+                  {DEPT_GROUPS.map((g) => (
+                    <optgroup key={g.school} label={g.school}>
+                      {g.items.map((d) => (
+                        <option key={d.slug} value={d.slug}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <span className="subtle">
+                  {profile.department && !department
+                    ? "Guessed from your course codes. Confirm once and we'll remember it on this device."
+                    : "Asked once, remembered on this device."}
+                </span>
+              </label>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={!draftDept}
+                onClick={() => {
+                  onConfirmDepartment(draftDept);
+                  setEditingDept(false);
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          ) : (
+            <p className="modal-count">
+              {departmentLabel(department)}{" "}
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setEditingDept(true)}
+              >
+                Change
+              </button>
+            </p>
+          )}
+
+          <p className="modal-count">
+            {selected.size} of {profile.courses.length} selected
+          </p>
+          <ul className="checklist" role="group" aria-label="This semester's courses">
+            {ordered.map((c) => {
+              const checked = selected.has(c.id);
+              return (
+                <li key={c.id}>
+                  <label className={`check-row ${checked ? "is-checked" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(c.id)}
+                    />
+                    <span className="checkbox" aria-hidden="true">
+                      {checked ? "✓" : ""}
+                    </span>
+                    <span className="check-label">{c.fullname}</span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Package courses they aren't enrolled in: a note, never runnable. */}
+          {department && profile.notes.length > 0 && (
+            <div className="alert alert-notice" role="note">
+              <span aria-hidden="true">ℹ️</span>
+              <span>
+                {profile.notes.join(" ")} We can only run courses you&apos;re
+                enrolled in.
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="modal-foot">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => onStart(Array.from(selected))}
+            disabled={selected.size === 0}
+            ref={startRef}
+          >
+            Start <span aria-hidden="true">→</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Preset modal (focus trapped)                                       */
+/* ------------------------------------------------------------------ */
+
+function PresetModal({
+  preset,
+  onClose,
+  onConfirm,
+}: {
+  preset: Preset;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  useModalTrap(dialogRef, confirmRef, onClose);
 
   return (
     <div

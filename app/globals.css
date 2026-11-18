@@ -477,7 +477,7 @@ button {
   height: 34px;
   border-width: 3px;
   border-color: var(--accent-border);
-  border-top-color: var(--violet);
+  border-top-color: var(--accent);
 }
 
 @keyframes spin {
@@ -1811,7 +1811,7 @@ input:disabled {
 
 .activity-link:hover,
 .activity-link:focus-visible {
-  color: var(--indigo);
+  color: var(--accent);
   text-decoration: underline;
 }
 
@@ -1883,7 +1883,7 @@ input:disabled {
 
 .run-pill:hover,
 .run-pill:focus-visible {
-  border-color: var(--violet);
+  border-color: var(--accent);
   color: var(--text);
 }
 
@@ -2044,7 +2044,7 @@ input:disabled {
 
 .gist-textarea:focus-visible {
   outline: none;
-  border-color: var(--violet);
+  border-color: var(--accent);
   box-shadow: var(--ring-focus);
 }
 
@@ -2382,7 +2382,7 @@ input:disabled {
 .composer-field select:focus-visible,
 .composer-field input:focus-visible {
   outline: none;
-  border-color: var(--violet);
+  border-color: var(--accent);
   box-shadow: var(--ring-focus);
 }
 
@@ -2435,7 +2435,7 @@ input:disabled {
 .event-when {
   font-size: 0.78rem;
   font-weight: 700;
-  color: var(--teal);
+  color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2684,7 +2684,7 @@ input:disabled {
 /* ---- identity: username prompt, toggle, author labels ------------ */
 
 .gist-author-named {
-  color: var(--violet);
+  color: var(--accent);
   font-weight: 700;
 }
 
@@ -2743,7 +2743,7 @@ input:disabled {
 }
 
 .username-field:focus-within {
-  border-color: var(--violet);
+  border-color: var(--accent);
   box-shadow: var(--ring-focus);
 }
 

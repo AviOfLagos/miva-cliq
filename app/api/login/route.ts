@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { login, LoginError } from "@/lib/moodle/auth";
-import { seal, SESSION_COOKIE } from "@/lib/session";
+import { seal, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS } from "@/lib/session";
 import { recordUser, recordConsent } from "@/lib/store/metrics";
 
 export const runtime = "nodejs";
@@ -45,7 +45,9 @@ export async function POST(req: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 2, // 2h — matches Moodle session lifetime roughly
+      // Tidies the cookie up in the browser. The real enforcement is the `iat`
+      // check inside unseal() — this attribute is advisory and client-side.
+      maxAge: SESSION_MAX_AGE_SECONDS,
     });
     return res;
   } catch (e) {

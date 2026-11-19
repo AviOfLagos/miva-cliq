@@ -17,6 +17,16 @@ export default function PracticePage({ searchParams }: { searchParams: Record<st
   const course = one(searchParams.course).toLowerCase();
   const week = Number(one(searchParams.week));
   const valid = /^[a-z]{2,5}\d{3}$/.test(course) && Number.isInteger(week) && week > 0 && week < 100;
+  // The Moodle course id lets generation read this week's material; optional (browsed courses have none).
+  const cidRaw = Number(one(searchParams.cid));
+  const courseId = Number.isInteger(cidRaw) && cidRaw > 0 && cidRaw < 1e9 ? cidRaw : null;
   // Keyed so "Next week" starts a fresh screen instead of carrying the last set's state.
-  return <PracticeClient key={`${course}-${week}`} course={valid ? course : ""} week={valid ? week : 0} />;
+  return (
+    <PracticeClient
+      key={`${course}-${week}`}
+      course={valid ? course : ""}
+      week={valid ? week : 0}
+      courseId={valid ? courseId : null}
+    />
+  );
 }

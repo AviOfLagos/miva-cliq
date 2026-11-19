@@ -73,7 +73,7 @@ export default function KeyClient({ back }: { back: string | null }) {
     <section className="answers-page practice-page">
       <header className="answers-head">
         <Link href={back || "/study"} className="subtle practice-back">
-          ← {back ? "Back to practice" : "Study"}
+          ← {back && back !== "/study" ? "Back to practice" : "Study"}
         </Link>
         <h1>Get a free Gemini key</h1>
         <p className="subtle">
@@ -148,7 +148,7 @@ export default function KeyClient({ back }: { back: string | null }) {
         </p>
         {saved && back && (
           <Link href={back} className="btn btn-primary btn-block">
-            Create questions now
+            {back === "/study" ? "Back to Study to prepare" : "Create questions now"}
           </Link>
         )}
       </div>

@@ -5,7 +5,8 @@ import { listAnswers } from "@/lib/store/quizAnswers";
 import { storeEnabled } from "@/lib/store/db";
 import { getLmsSession } from "@/lib/identity";
 import { cleanWeekTitle, topicsFromActivities, type SampleQuestion } from "@/lib/study/prompts";
-import { saveOutline, weekCounts } from "@/lib/store/practice";
+import { notesWeeks, saveOutline, weekCounts } from "@/lib/store/practice";
+import { BANK_TARGET } from "@/lib/practice/targets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,12 +21,16 @@ export type StudyWeekData = {
   sampleQuestions: SampleQuestion[];
   /** Usable practice questions in the bank for this week; null when practice is unavailable. */
   practiceCount: number | null;
+  /** Whether condensed notes from this week's material are saved; null when unknown. */
+  hasNotes: boolean | null;
 };
 
 /**
  * GET /api/study?courseId=N — one course's weeks, each with the topics derived
  * from its activity names and (when the shared bank has any) up to five real
- * questions. Prompts are built on the client from this data with
+ * questions, plus coverage (usable practice questions and whether notes are
+ * saved) so the page can steer students to the weeks that still need work.
+ * Prompts are built on the client from this data with
  * lib/study/prompts.ts. The only write is the shared course outline (course
  * code, week titles, topic names: nothing about the student), saved so practice
  * questions can be generated later without asking the LMS again.
@@ -73,8 +78,9 @@ export async function GET(req: NextRequest) {
     // Bank questions are a bonus: no DB, no code, or a failed query all mean
     // "no samples", never an error.
     const useBank = storeEnabled() && !!courseCode;
-    const [counts] = await Promise.all([
+    const [counts, noted] = await Promise.all([
       useBank && courseCode ? weekCounts(courseCode) : Promise.resolve(null),
+      useBank && courseCode ? notesWeeks(courseCode) : Promise.resolve(null),
       useBank && courseCode
         ? saveOutline(
             courseCode,
@@ -95,13 +101,19 @@ export async function GET(req: NextRequest) {
             .slice(0, SAMPLES_PER_WEEK)
             .map((r) => ({ question: r.questionText }));
         }
-        return { ...w, sampleQuestions, practiceCount: counts ? (counts.get(w.weekNumber) ?? 0) : null };
+        return {
+          ...w,
+          sampleQuestions,
+          practiceCount: counts ? (counts.get(w.weekNumber) ?? 0) : null,
+          hasNotes: noted ? noted.has(w.weekNumber) : null,
+        };
       }),
     );
 
     return NextResponse.json({
       course: { id: course.id, fullname: course.fullname, code: courseCode },
       weeks: out,
+      target: BANK_TARGET,
     });
   } catch (e) {
     console.error("[study] could not read course", courseId, e);

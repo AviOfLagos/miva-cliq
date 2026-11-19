@@ -11,7 +11,10 @@ export const dynamic = "force-dynamic";
 
 export default function KeyPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const raw = Array.isArray(searchParams.back) ? searchParams.back[0] : searchParams.back;
-  // Only ever link back into our own practice screen.
-  const back = raw && /^\/study\/practice\?course=[a-z]{2,5}\d{3}&week=\d{1,2}$/.test(raw) ? raw : null;
+  // Only ever link back into our own Study or practice screen.
+  const back =
+    raw && (raw === "/study" || /^\/study\/practice\?course=[a-z]{2,5}\d{3}&week=\d{1,2}(&cid=\d{1,9})?$/.test(raw))
+      ? raw
+      : null;
   return <KeyClient back={back} />;
 }

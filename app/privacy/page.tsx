@@ -127,13 +127,19 @@ export default function PrivacyPage() {
             {`When you open a course on the Study page, we save that course's week titles and topic names (course information from the learning platform, nothing about you) so practice questions can be made for it later.`}
           </li>
           <li>
+            {`When you create practice questions while connected to your learning platform, our server reads that one week's course material with your session (page text, and small PDF files) and sends it, with your own Gemini key, to Google for a single call. Videos, external links and large files are skipped. We do not keep the university's files or page text: no copies, no file contents and no search index. What we keep is our own short notes on the week (key points the AI wrote, capped at about 6,000 characters) and the questions, shared with everyone so later questions for that week need neither your learning platform nor anyone's files. The notes carry the same one-way hash of who created them (for abuse control, never shown).`}
+          </li>
+          <li>
+            {`Anyone signed in can practise any course that has questions, including courses they are not enrolled in. What is shared is course information only (course codes, titles, week titles, notes and questions), never who prepared or answered what.`}
+          </li>
+          <li>
             {`When you answer a practice question, we record the question, whether you got it right, and when, keyed to the same one-way hash as above. That is what brings missed questions back after 1, 3 and 7 days, and what future streaks and progress features will count. It is never shown to other students as yours.`}
           </li>
           <li>
             {`Questions you create are saved for everyone on that course, along with the one-way hash of who created them (for abuse control, never shown). If you report a question, we store that report against the same hash so each person counts once.`}
           </li>
           <li>
-            {`If you add a Gemini API key, it is kept only in your browser's local storage. When you create questions or test the key, your browser sends it to our server with that single request, and our server passes it to Google to make that call. We do not save the key in any database, file or log, and we never use it for anything else. Google handles that call under its own terms, and it counts against your own free limit. You can remove the key from this browser at any time, or delete it in Google AI Studio.`}
+            {`If you add a Gemini API key, it is kept only in your browser's local storage. When you create questions (one week at a time, including when you press Prepare), or test the key, your browser sends it to our server with that single request, and our server passes it to Google to make that call. We do not save the key in any database, file or log, and we never use it for anything else. Google handles that call under its own terms, and it counts against your own free limit. You can remove the key from this browser at any time, or delete it in Google AI Studio.`}
           </li>
         </ul>
       </div>
@@ -144,7 +150,7 @@ export default function PrivacyPage() {
         <ul className="doc-list">
           <li>{`Hosting and storage providers run the servers and databases the Service uses. Your requests pass through them.`}</li>
           <li>{`Your learning platform (the LMS) receives the logins and actions you instruct the Service to perform, exactly as if you did them yourself.`}</li>
-          <li>{`Google (Gemini) receives the course outline and your own key when you choose to create practice questions or test a key. Nothing about you is in that request beyond the key itself.`}</li>
+          <li>{`Google (Gemini) receives the course outline, that week's course material or our saved notes on it, and your own key when you choose to create practice questions or test a key. Your key does all of that AI work; the Service pays for none of it and does not store the key. Nothing about you is in that request beyond the key itself.`}</li>
           <li>{`If advertising is added in future, an ad provider may collect data through your browser under its own policy. We'll note it here if and when that happens.`}</li>
         </ul>
       </div>

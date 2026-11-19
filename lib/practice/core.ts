@@ -8,10 +8,9 @@ import crypto from "node:crypto";
 
 /* ------------------------------------------------------------ constants --- */
 
-/** A course-week with fewer usable questions than this asks for more. */
-export const BANK_TARGET = 20;
-/** Questions asked of the model per generation call. */
-export const BATCH_SIZE = 10;
+import { BANK_TARGET, BATCH_SIZE } from "./targets.ts";
+
+export { BANK_TARGET, BATCH_SIZE };
 /** Questions in one practice set. */
 export const SET_SIZE = 5;
 export const OPTION_COUNT = 4;

@@ -89,7 +89,15 @@ export type KeyedResult =
 export async function geminiCompleteWithKey(
   key: string,
   prompt: string,
-  opts: { schema?: object; maxOutputTokens?: number; temperature?: number; timeoutMs?: number } = {},
+  opts: {
+    schema?: object;
+    maxOutputTokens?: number;
+    temperature?: number;
+    /** Total time for the call, the one 5xx retry included, so a route can stay inside maxDuration. */
+    timeoutMs?: number;
+    /** Files sent with the prompt (small PDFs), base64-encoded. Never logged. */
+    inline?: { mimeType: string; data: string }[];
+  } = {},
 ): Promise<KeyedResult> {
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
   const generationConfig: any = {
@@ -100,7 +108,12 @@ export async function geminiCompleteWithKey(
     generationConfig.responseMimeType = "application/json";
     generationConfig.responseSchema = toGeminiSchema(opts.schema);
   }
-  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig });
+  const parts: object[] = [
+    ...(opts.inline ?? []).map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })),
+    { text: prompt },
+  ];
+  const body = JSON.stringify({ contents: [{ parts }], generationConfig });
+  const signal = AbortSignal.timeout(opts.timeoutMs ?? 45_000);
 
   for (let attempt = 0; attempt < 2; attempt++) {
     let r: Response;
@@ -110,7 +123,7 @@ export async function geminiCompleteWithKey(
         headers: { "content-type": "application/json", "x-goog-api-key": key },
         body,
         cache: "no-store",
-        signal: AbortSignal.timeout(opts.timeoutMs ?? 45_000),
+        signal,
       });
     } catch {
       return { ok: false, httpStatus: 0, body: null };

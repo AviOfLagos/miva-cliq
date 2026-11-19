@@ -267,3 +267,116 @@ export async function reportQuestion(
   const status = counted ? await applyStatus(questionId, rows[0]) : toStored({ ...rows[0], id: questionId }).status;
   return { counted, status };
 }
+
+/* ---------------------------------------------------------- week notes --- */
+/*
+ * Our condensed notes on a week's material (written by the model in the first
+ * material-based generation), so later generations need no LMS access. Every
+ * function here degrades to "no notes" when the week_notes table is not there
+ * yet: generation then falls back to the material or the outline, and nothing
+ * throws.
+ */
+
+export async function getWeekNotes(courseCode: string, week: number): Promise<string | null> {
+  const sql = getDb();
+  if (!sql) return null;
+  try {
+    const rows = (await sql`
+      SELECT notes FROM week_notes WHERE course_code = ${courseCode} AND week = ${week}
+    `) as any[];
+    const notes = rows[0]?.notes;
+    return typeof notes === "string" && notes.trim() ? notes : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Weeks of a course that have notes. null when unreadable (no table yet, no DB). */
+export async function notesWeeks(courseCode: string): Promise<Set<number> | null> {
+  const sql = getDb();
+  if (!sql) return null;
+  try {
+    const rows = (await sql`SELECT week FROM week_notes WHERE course_code = ${courseCode}`) as any[];
+    return new Set(rows.map((r) => Number(r.week)));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save notes, best effort. One row per course-week; a later save replaces it
+ * only when it was built from more sources, so a thin first pass can be
+ * improved but a good one is not overwritten by a worse one.
+ */
+export async function saveWeekNotes(
+  courseCode: string,
+  week: number,
+  notes: string,
+  sourceCount: number,
+  authorHash: string,
+): Promise<boolean> {
+  const sql = getDb();
+  if (!sql || !notes) return false;
+  try {
+    await sql`
+      INSERT INTO week_notes (course_code, week, notes, source_count, author_hash, updated_at)
+      VALUES (${courseCode}, ${week}, ${notes.slice(0, 6000)}, ${sourceCount}, ${authorHash}, now())
+      ON CONFLICT (course_code, week) DO UPDATE
+        SET notes = EXCLUDED.notes,
+            source_count = EXCLUDED.source_count,
+            author_hash = EXCLUDED.author_hash,
+            updated_at = now()
+        WHERE week_notes.source_count < EXCLUDED.source_count
+    `;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/* -------------------------------------------------------------- browse --- */
+
+export type BrowseCourse = { courseCode: string; courseTitle: string; weeks: number; ready: number; started: number };
+
+/**
+ * Every course anyone has opened on /study, from the shared outlines, with how
+ * many of its weeks are ready (target+ usable questions) or started. Course-level
+ * data only.
+ */
+export async function browseCourses(target: number): Promise<BrowseCourse[]> {
+  const rows = await q<any[]>((sql) => sql`
+    SELECT o.course_code,
+           max(o.course_title) AS course_title,
+           count(*)::int AS weeks,
+           count(*) FILTER (WHERE coalesce(p.n, 0) >= ${target})::int AS ready,
+           count(*) FILTER (WHERE coalesce(p.n, 0) > 0)::int AS started
+      FROM course_outline o
+      LEFT JOIN (
+        SELECT course_code, week, count(*) AS n FROM practice_questions
+         WHERE status <> 'hidden' GROUP BY course_code, week
+      ) p ON p.course_code = o.course_code AND p.week = o.week
+     GROUP BY o.course_code
+     ORDER BY o.course_code
+     LIMIT 3000
+  `);
+  return rows.map((r) => ({
+    courseCode: String(r.course_code),
+    courseTitle: String(r.course_title ?? ""),
+    weeks: Number(r.weeks) || 0,
+    ready: Number(r.ready) || 0,
+    started: Number(r.started) || 0,
+  }));
+}
+
+/** One course's saved weeks (number and title), for browsing a course you are not enrolled in. */
+export async function outlineWeeks(
+  courseCode: string,
+): Promise<{ courseTitle: string; weeks: { week: number; weekTitle: string }[] }> {
+  const rows = await q<any[]>((sql) => sql`
+    SELECT week, course_title, week_title FROM course_outline WHERE course_code = ${courseCode} ORDER BY week
+  `);
+  return {
+    courseTitle: String(rows[0]?.course_title ?? ""),
+    weeks: rows.map((r) => ({ week: Number(r.week), weekTitle: String(r.week_title ?? "") })),
+  };
+}

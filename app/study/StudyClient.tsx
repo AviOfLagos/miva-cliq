@@ -13,6 +13,10 @@ import {
   type PromptVariant,
   type SampleQuestion,
 } from "@/lib/study/prompts";
+import { loadGeminiKey } from "@/lib/run/prefs";
+import { courseSummary, weekCoverage } from "@/lib/practice/coverage";
+import { BANK_TARGET } from "@/lib/practice/targets";
+import { usePrepare, type PrepState } from "./usePrepare";
 
 type Course = { id: number; fullname: string };
 
@@ -22,12 +26,16 @@ type Week = {
   topics: string[];
   sampleQuestions: SampleQuestion[];
   practiceCount?: number | null;
+  hasNotes?: boolean | null;
 };
 
 type CourseData = {
   course: { id: number; fullname: string; code: string | null };
   weeks: Week[];
+  target?: number;
 };
+
+const KEY_HREF = "/study/key?back=%2Fstudy";
 
 /** Clipboard API first; the hidden-textarea fallback covers older phones and http. */
 async function copyText(text: string): Promise<boolean> {
@@ -78,6 +86,7 @@ function WeekCard({ data, week }: { data: CourseData; week: Week }) {
   const prompt = prompts[variant];
   const title = cleanWeekTitle(week.weekTitle);
   const blurb = VARIANTS.find((v) => v.id === variant)?.blurb;
+  const coverage = weekCoverage(week.practiceCount, data.target ?? BANK_TARGET);
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
@@ -102,6 +111,7 @@ function WeekCard({ data, week }: { data: CourseData; week: Week }) {
     <li className="answer-card">
       <div className="answer-meta-row">
         <span className="pill pill-ghost">Week {week.weekNumber}</span>
+        {week.hasNotes && <span className="pill pill-ghost">Notes from course material</span>}
         {week.sampleQuestions.length > 0 && (
           <span className="pill pill-good">
             {week.sampleQuestions.length} real question{week.sampleQuestions.length === 1 ? "" : "s"}
@@ -109,18 +119,14 @@ function WeekCard({ data, week }: { data: CourseData; week: Week }) {
         )}
       </div>
       {title && <h2 className="study-week-title">{title}</h2>}
+      {coverage.label && <p className={`coverage-line is-${coverage.kind}`}>{coverage.label}</p>}
 
       {data.course.code && (
         <Link
           className="btn btn-primary btn-block practice-cta"
-          href={`/study/practice?course=${encodeURIComponent(data.course.code)}&week=${week.weekNumber}`}
+          href={`/study/practice?course=${encodeURIComponent(data.course.code)}&week=${week.weekNumber}&cid=${data.course.id}`}
         >
-          Practise
-          {typeof week.practiceCount === "number" && week.practiceCount > 0 && (
-            <span className="practice-cta-sub">
-              {week.practiceCount} question{week.practiceCount === 1 ? "" : "s"}
-            </span>
-          )}
+          {coverage.kind === "empty" ? "Add questions for this week" : "Practise"}
         </Link>
       )}
 
@@ -188,6 +194,76 @@ function WeekCard({ data, week }: { data: CourseData; week: Week }) {
   );
 }
 
+function PreparePanel({ state, onStop }: { state: PrepState; onStop: () => void }) {
+  if (!state.lines.length && !state.message) return null;
+  const done = state.lines.filter((l) => l.status === "ready").length;
+  return (
+    <div className="card prepare-panel" aria-live="polite">
+      {state.lines.length > 0 && (
+        <p className="prepare-head">
+          {done} of {state.lines.length} week{state.lines.length === 1 ? "" : "s"} ready
+        </p>
+      )}
+      {state.message && <p className="subtle prepare-message">{state.message}</p>}
+      {state.fixKey && (
+        <Link href={KEY_HREF} className="btn btn-ghost btn-sm">
+          Check my key
+        </Link>
+      )}
+      {state.lines.length > 0 && (
+        <ul className="prepare-list">
+          {state.lines.map((l) => (
+            <li key={l.key} className={`prepare-row is-${l.status}`}>
+              <span>{l.label}</span>
+              <span className="prepare-row-state">
+                {l.status === "working"
+                  ? "Working…"
+                  : l.status === "ready"
+                    ? `Ready: ${l.count ?? ""}`
+                    : l.status === "partial"
+                      ? `${l.count ?? 0} so far`
+                      : l.status === "failed"
+                        ? "Skipped"
+                        : "Waiting"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {state.running && (
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onStop}>
+          Stop
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PrepareButton({
+  hasKey,
+  running,
+  label,
+  onClick,
+}: {
+  hasKey: boolean;
+  running: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  if (!hasKey) {
+    return (
+      <Link href={KEY_HREF} className="btn btn-ghost btn-sm">
+        {label}: add your free Gemini key
+      </Link>
+    );
+  }
+  return (
+    <button type="button" className="btn btn-ghost btn-sm" onClick={onClick} disabled={running}>
+      {running ? "Preparing…" : label}
+    </button>
+  );
+}
+
 export default function StudyClient() {
   const { authed } = useApp();
   const [courses, setCourses] = useState<Course[]>([]);
@@ -197,6 +273,18 @@ export default function StudyClient() {
   const [data, setData] = useState<CourseData | null>(null);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasKey, setHasKey] = useState(false);
+
+  useEffect(() => setHasKey(!!loadGeminiKey()), []);
+
+  const onCount = useCallback((courseId: number, week: number, count: number) => {
+    setData((d) =>
+      d && d.course.id === courseId
+        ? { ...d, weeks: d.weeks.map((w) => (w.weekNumber === week ? { ...w, practiceCount: count } : w)) }
+        : d,
+    );
+  }, []);
+  const prep = usePrepare({ getKey: loadGeminiKey, onCount });
 
   useEffect(() => {
     let alive = true;
@@ -252,6 +340,10 @@ export default function StudyClient() {
           <h1>Study</h1>
         </header>
         <ReconnectPrompt what="load your courses" />
+        <p className="subtle">
+          Or practise without reconnecting: <Link href="/study/browse">browse all courses</Link> that classmates have
+          prepared.
+        </p>
       </section>
     );
   }
@@ -285,7 +377,28 @@ export default function StudyClient() {
           is sent to any AI from here. Want the course files offline?{" "}
           <Link href="/study-pack">Get the study pack</Link>.
         </p>
+        <p className="subtle">
+          Practice questions are made once and shared with everyone on the course. Pick a week that still needs
+          questions, or <Link href="/study/browse">browse all courses</Link> to practise any course classmates have
+          prepared.
+        </p>
       </header>
+
+      {!loading && courses.length > 0 && !current && (
+        <div className="prepare-bar">
+          <PrepareButton
+            hasKey={hasKey}
+            running={prep.state.running}
+            label="Prepare all my courses"
+            onClick={() => prep.run(courses)}
+          />
+          <p className="subtle prepare-hint">
+            Uses your own free Gemini key to fill every week of your courses with questions, one week at a time.
+            You can stop and carry on later.
+          </p>
+        </div>
+      )}
+      <PreparePanel state={prep.state} onStop={prep.stop} />
 
       {loading && <p className="subtle">Loading your courses…</p>}
       {!loading && !error && courses.length === 0 && (
@@ -303,10 +416,21 @@ export default function StudyClient() {
               {reading
                 ? "Reading this course…"
                 : data
-                  ? `${data.weeks.length} week${data.weeks.length === 1 ? "" : "s"}`
+                  ? courseSummary(
+                      data.weeks.map((w) => w.practiceCount),
+                      data.target ?? BANK_TARGET,
+                    ) || `${data.weeks.length} week${data.weeks.length === 1 ? "" : "s"}`
                   : ""}
             </span>
           </div>
+          {data && data.weeks.length > 0 && data.course.code && (
+            <PrepareButton
+              hasKey={hasKey}
+              running={prep.state.running}
+              label="Prepare this course"
+              onClick={() => prep.run([{ id: data.course.id, fullname: data.course.fullname }])}
+            />
+          )}
           <button
             type="button"
             className="btn btn-ghost btn-sm"

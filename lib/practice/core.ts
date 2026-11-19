@@ -8,10 +8,9 @@ import crypto from "node:crypto";
 
 /* ------------------------------------------------------------ constants --- */
 
-/** A course-week with fewer usable questions than this asks for more. */
-export const BANK_TARGET = 20;
-/** Questions asked of the model per generation call. */
-export const BATCH_SIZE = 10;
+import { BANK_TARGET, BATCH_SIZE, batchSizeFor } from "./targets.ts";
+
+export { BANK_TARGET, BATCH_SIZE, batchSizeFor };
 /** Questions in one practice set. */
 export const SET_SIZE = 5;
 export const OPTION_COUNT = 4;
@@ -145,13 +144,17 @@ export function validateQuestion(raw: unknown): ValidQuestion | null {
  * Validate a model's whole batch: drop anything malformed, anything already in
  * the bank (`existing` = known question hashes), and repeats within the batch.
  */
-export function validateBatch(raw: unknown, existing: Iterable<string> = []): ValidQuestion[] {
+export function validateBatch(
+  raw: unknown,
+  existing: Iterable<string> = [],
+  max: number = BANK_TARGET * 2,
+): ValidQuestion[] {
   let list: unknown = raw;
   if (list && typeof list === "object" && !Array.isArray(list)) list = (list as any).questions;
   if (!Array.isArray(list)) return [];
   const seen = new Set(existing);
   const out: ValidQuestion[] = [];
-  for (const item of list.slice(0, BATCH_SIZE * 2)) {
+  for (const item of list.slice(0, max)) {
     const q = validateQuestion(item);
     if (!q || seen.has(q.hash)) continue;
     seen.add(q.hash);
@@ -160,7 +163,13 @@ export function validateBatch(raw: unknown, existing: Iterable<string> = []): Va
   return out;
 }
 
-/** Parse the model's text (schema-forced JSON, but be forgiving about a fence). */
+/**
+ * Parse the model's text (schema-forced JSON, but be forgiving about a fence).
+ * If the JSON does not parse, usually because the output hit the token limit
+ * mid-question, salvage what is complete: the notes string if it closed, and
+ * every question object that closed. The cut-off one is dropped, so a
+ * truncated batch keeps its valid questions instead of failing the week.
+ */
 export function parseBatchText(text: string | null | undefined): unknown {
   if (!text) return null;
   let t = text.trim();
@@ -169,8 +178,59 @@ export function parseBatchText(text: string | null | undefined): unknown {
   try {
     return JSON.parse(t);
   } catch {
-    return null;
+    return salvageBatch(text);
   }
+}
+
+/** Complete top-level objects inside the array that starts at `from` (the index of its "["). */
+function completeObjects(s: string, from: number): unknown[] {
+  const out: unknown[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = from + 1; i < s.length; i++) {
+    const c = s[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (c === "}") {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        try {
+          out.push(JSON.parse(s.slice(start, i + 1)));
+        } catch {
+          /* malformed: skip it */
+        }
+        start = -1;
+      }
+      if (depth < 0) break;
+    } else if (c === "]" && depth === 0) break;
+  }
+  return out;
+}
+
+export function salvageBatch(text: string): { notes?: string; questions: unknown[] } | null {
+  const arr = text.search(/"questions"\s*:\s*\[/);
+  const questions = arr >= 0 ? completeObjects(text, text.indexOf("[", arr)) : [];
+  let notes: string | undefined;
+  const n = text.match(/"notes"\s*:\s*("(?:[^"\\]|\\.)*")/);
+  if (n) {
+    try {
+      notes = JSON.parse(n[1]);
+    } catch {
+      notes = undefined;
+    }
+  }
+  if (!questions.length && notes === undefined) return null;
+  return notes === undefined ? { questions } : { notes, questions };
 }
 
 /* ----------------------------------------------------- spaced repetition --- */

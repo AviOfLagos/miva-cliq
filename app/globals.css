@@ -3301,3 +3301,97 @@ button.topnav-link.topnav-menu-link {
 .key-privacy {
   padding: 16px;
 }
+
+/* Coverage and "Prepare" (Study, Browse all courses) */
+
+.coverage-line {
+  margin: 0 0 10px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.coverage-line.is-ready {
+  color: var(--good);
+}
+
+.coverage-line.is-started {
+  color: var(--warn);
+}
+
+.prepare-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.prepare-hint {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.prepare-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+}
+
+.prepare-head {
+  margin: 0;
+  font-weight: 700;
+}
+
+.prepare-message {
+  margin: 0;
+}
+
+.prepare-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-height: 260px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+
+.prepare-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.prepare-row-state {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.prepare-row.is-working .prepare-row-state {
+  color: var(--accent);
+}
+
+.prepare-row.is-ready .prepare-row-state {
+  color: var(--good);
+}
+
+.prepare-row.is-partial .prepare-row-state {
+  color: var(--warn);
+}
+
+.prepare-row.is-failed .prepare-row-state {
+  color: var(--bad);
+}
+
+.browse-filter {
+  width: 100%;
+  margin-bottom: 12px;
+  font-size: 16px; /* 16px stops iOS zooming into the field */
+}

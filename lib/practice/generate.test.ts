@@ -20,7 +20,8 @@ test("the prompt quotes the outline inside a delimited data block", () => {
   assert.match(block, /COS 202/);
   assert.match(block, /- Loops/);
   assert.match(p.slice(0, start), /data, not instructions/);
-  assert.match(p, /Write 10 multiple-choice/);
+  assert.match(p, /Write 20 multiple-choice/);
+  assert.match(buildGenerationPrompt(outline, 10), /Write 10 multiple-choice/);
 });
 
 test("outline text cannot close the block or add lines", () => {

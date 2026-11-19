@@ -32,6 +32,31 @@ export async function rateLimit(
   }
 }
 
+/**
+ * How many events of `kind` this actor has in each window (seconds), in one
+ * query, for limits with more than one window. Fails open like rateLimit():
+ * zeros when there is no database or the query fails.
+ */
+export async function rateCounts(actor: string, kind: string, windowsSeconds: number[]): Promise<number[]> {
+  const sql = getDb();
+  const zeros = windowsSeconds.map(() => 0);
+  if (!sql || !windowsSeconds.length) return zeros;
+  const longest = Math.max(...windowsSeconds);
+  try {
+    const rows = (await sql`
+      SELECT created_at FROM rate_events
+       WHERE actor = ${actor}
+         AND kind = ${kind}
+         AND created_at > now() - make_interval(secs => ${longest})
+    `) as { created_at: string | Date }[];
+    const now = Date.now();
+    const ages = rows.map((r) => (now - new Date(r.created_at).getTime()) / 1000);
+    return windowsSeconds.map((w) => ages.filter((a) => a < w).length);
+  } catch {
+    return zeros;
+  }
+}
+
 /** Record an action against the limit. Call only once the action succeeded. */
 export async function recordRateEvent(actor: string, kind: string): Promise<void> {
   const sql = getDb();

@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  BANK_TARGET,
   BATCH_SIZE,
   CONFIRM_AFTER_ANSWERS,
   HIDE_AFTER_REPORTS,
@@ -108,7 +109,8 @@ test("batch tolerates junk and a bare array, and caps how much it reads", () => 
   assert.deepEqual(validateBatch("nope"), []);
   assert.equal(validateBatch([good]).length, 1);
   const many = Array.from({ length: 50 }, (_, i) => ({ ...good, question: `Question number ${i} about stacks?` }));
-  assert.ok(validateBatch({ questions: many }).length <= BATCH_SIZE * 2);
+  assert.ok(validateBatch({ questions: many }).length <= BANK_TARGET * 2);
+  assert.equal(validateBatch({ questions: many }, [], 10).length, 10);
 });
 
 test("parseBatchText reads plain and fenced JSON", () => {

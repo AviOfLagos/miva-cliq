@@ -45,7 +45,15 @@ async function post(url: string, body: unknown, headers: Record<string, string> 
   return { res, json };
 }
 
-export default function PracticeClient({ course, week }: { course: string; week: number }) {
+export default function PracticeClient({
+  course,
+  week,
+  courseId = null,
+}: {
+  course: string;
+  week: number;
+  courseId?: number | null;
+}) {
   const [phase, setPhase] = useState<Phase>({ k: "loading" });
   const [set, setSet] = useState<SetData | null>(null);
   const [index, setIndex] = useState(0);
@@ -58,7 +66,7 @@ export default function PracticeClient({ course, week }: { course: string; week:
   const [elapsed, setElapsed] = useState(0);
   const generatedOnce = useRef(false);
 
-  const here = `/study/practice?course=${encodeURIComponent(course)}&week=${week}`;
+  const here = `/study/practice?course=${encodeURIComponent(course)}&week=${week}${courseId ? `&cid=${courseId}` : ""}`;
   const keyHref = `${KEY_PAGE}?back=${encodeURIComponent(here)}`;
 
   const start = useCallback((s: SetData) => {
@@ -94,7 +102,11 @@ export default function PracticeClient({ course, week }: { course: string; week:
       setSet(current);
       setPhase({ k: "generating" });
       try {
-        const { res, json } = await post("/api/practice/generate", { courseCode: course, week }, { "x-gemini-key": key });
+        const { res, json } = await post(
+          "/api/practice/generate",
+          { courseCode: course, week, ...(courseId ? { courseId } : {}) },
+          { "x-gemini-key": key },
+        );
         if (res.status === 401) return setPhase({ k: "loggedOut" });
         if (res.status === 503 && json?.unavailable) return setPhase({ k: "unavailable" });
         // 409 = someone else filled the week meanwhile: just practise.
@@ -112,7 +124,7 @@ export default function PracticeClient({ course, week }: { course: string; week:
         setPhase({ k: "genError", msg: "Your connection dropped while creating questions. Try again.", badKey: false });
       }
     },
-    [course, week, fetchSet, start],
+    [course, week, courseId, fetchSet, start],
   );
 
   const load = useCallback(async () => {
@@ -325,7 +337,7 @@ export default function PracticeClient({ course, week }: { course: string; week:
             {elapsed < 8
               ? "Asking Gemini with your key…"
               : elapsed < 25
-                ? "Writing ten questions and checking each one…"
+                ? "Reading this week's material and writing the questions…"
                 : "Almost there. Long weeks take a little longer."}{" "}
             ({elapsed}s)
           </p>
@@ -358,7 +370,7 @@ export default function PracticeClient({ course, week }: { course: string; week:
             {set.nextWeek ? (
               <Link
                 className="btn btn-ghost btn-block"
-                href={`/study/practice?course=${encodeURIComponent(course)}&week=${set.nextWeek}`}
+                href={`/study/practice?course=${encodeURIComponent(course)}&week=${set.nextWeek}${courseId ? `&cid=${courseId}` : ""}`}
               >
                 Next week
               </Link>

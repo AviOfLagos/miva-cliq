@@ -260,3 +260,23 @@ CREATE TABLE IF NOT EXISTS revoked_sessions (
 
 CREATE INDEX IF NOT EXISTS revoked_sessions_expires_idx
   ON revoked_sessions (expires_at);
+
+-- Week notes: OUR condensed key points of one course-week's material, written
+-- by the model (with a student's own Gemini key) the first time that week is
+-- generated from real LMS material, then reused for every later batch so
+-- generation needs no LMS access. Never the university's files: no file bytes,
+-- no embeddings, no raw page text, just notes capped at about 6,000 characters.
+-- Retrieval is by exact course + week, so there is no vector index.
+-- source_count = how many pages/files the notes were built from (a later save
+-- replaces a row only when built from more). author_hash is who generated them
+-- (abuse control) and is never returned. If this table is missing, generation
+-- falls back to the week's material or its outline, and nothing fails.
+CREATE TABLE IF NOT EXISTS week_notes (
+  course_code   TEXT        NOT NULL,
+  week          INT         NOT NULL,
+  notes         TEXT        NOT NULL CHECK (char_length(notes) <= 6000),
+  source_count  INT         NOT NULL DEFAULT 0,
+  author_hash   TEXT,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (course_code, week)
+);

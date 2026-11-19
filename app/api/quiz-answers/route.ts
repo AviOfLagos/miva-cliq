@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
-import { sessionAuthorHash } from "@/lib/store/authorHash";
+import { getAuthorHash } from "@/lib/identity";
 import { rateLimit, recordRateEvent, clientIp } from "@/lib/store/rateLimit";
 import { storeEnabled } from "@/lib/store/db";
 import { isDepartment } from "@/lib/taxonomy";
@@ -44,8 +43,8 @@ export async function GET(req: NextRequest) {
  * limiter). action: "edit" (set the answer) | "confirm" | "refute".
  */
 export async function PUT(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to edit answers." }, { status: 401 });
   }
   if (!storeEnabled()) {
@@ -63,7 +62,7 @@ export async function PUT(req: NextRequest) {
   const action = payload?.action;
   if (!hash) return NextResponse.json({ error: "questionHash required." }, { status: 400 });
 
-  const authorHash = sessionAuthorHash(session);
+  const authorHash = author;
   const ip = clientIp(req);
   const limit = await rateLimit(`ip:${ip}`, "quiz-edit", EDITS_PER_HOUR, HOUR);
   if (!limit.ok) {

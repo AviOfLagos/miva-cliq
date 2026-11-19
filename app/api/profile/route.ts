@@ -13,7 +13,7 @@
  * is refused unless the request comes from our own origin.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
+import { getLmsSession } from "@/lib/identity";
 import type { MoodleSession } from "@/lib/moodle/auth";
 import { listCurrentCourses } from "@/lib/moodle/courses";
 import { detectProfile, type ProfileOverride } from "@/lib/level/detect";
@@ -81,7 +81,7 @@ async function profile(
 }
 
 export async function GET(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
+  const session = await getLmsSession(req);
   if (!session) {
     return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   }
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
   if (!ok) {
     return NextResponse.json({ error: "Cross-site request refused." }, { status: 403 });
   }
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
+  const session = await getLmsSession(req);
   if (!session) {
     return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   }

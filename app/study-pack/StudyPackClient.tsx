@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/lib/run/AppContext";
+import ReconnectPrompt from "@/app/components/ReconnectPrompt";
 
 type Course = { id: number; fullname: string };
 
@@ -43,12 +44,20 @@ export default function StudyPackClient() {
   const [building, setBuilding] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The Miva session lapsed (401) while the 30-day identity is still valid.
+  const [needsLms, setNeedsLms] = useState(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const res = await fetch("/api/courses", { credentials: "include" });
+        if (!alive) return;
+        if (res.status === 401) {
+          setNeedsLms(true);
+          return;
+        }
+        setNeedsLms(false);
         const data = await res.json();
         if (!alive) return;
         if (!res.ok) throw new Error(data?.error || "Could not load your courses.");
@@ -72,6 +81,10 @@ export default function StudyPackClient() {
     setPlanning(true);
     try {
       const res = await fetch(`/api/export?courseId=${id}&plan=1`, { credentials: "include" });
+      if (res.status === 401) {
+        setNeedsLms(true);
+        return;
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Could not read that course.");
       setPlan(data.plan);
@@ -90,6 +103,10 @@ export default function StudyPackClient() {
     try {
       const url = `/api/export?courseId=${selected}${openAttempts ? "&open=1" : ""}`;
       const res = await fetch(url, { credentials: "include" });
+      if (res.status === 401) {
+        setNeedsLms(true);
+        return;
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || `Pack failed (${res.status}).`);
@@ -143,7 +160,11 @@ export default function StudyPackClient() {
         </p>
       </header>
 
-      {error && <p className="alert alert-error">{error}</p>}
+      {needsLms && authed ? (
+        <ReconnectPrompt what="build a study pack" />
+      ) : (
+        error && <p className="alert alert-error">{error}</p>
+      )}
       {loading && <p className="subtle">Loading your courses…</p>}
 
       <ul className="pack-list">

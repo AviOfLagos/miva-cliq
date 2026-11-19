@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/lib/run/AppContext";
+import ReconnectPrompt from "@/app/components/ReconnectPrompt";
 import {
   buildPrompts,
   chatGptUrl,
@@ -227,6 +228,18 @@ export default function StudyClient() {
       setReading(false);
     }
   }, []);
+
+  if (loggedOut && authed) {
+    // Signed in for 30 days, but the 2-hour Miva session has lapsed.
+    return (
+      <section className="answers-page">
+        <header className="answers-head">
+          <h1>Study</h1>
+        </header>
+        <ReconnectPrompt what="load your courses" />
+      </section>
+    );
+  }
 
   if (loggedOut || (!authed && !loading && !courses.length && !error)) {
     return (

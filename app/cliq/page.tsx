@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/run/AppContext";
 import { loadHistory, latestPerCourse } from "@/lib/run/history";
 import {
@@ -101,7 +102,15 @@ export default function Page() {
 /* ------------------------------------------------------------------ */
 
 function LoginScreen() {
-  const { signIn, authNotice } = useApp();
+  const { signIn, authNotice: expiredNotice, authed, lmsConnected } = useApp();
+  // Signed in through the 30-day identity, but the Miva session is gone: this
+  // form is the reconnect step, so say so rather than greet them as new.
+  const authNotice =
+    expiredNotice ||
+    (authed && !lmsConnected
+      ? "You're still signed in. Reconnect to Miva to run Autopilot or load your courses."
+      : null);
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -142,6 +151,12 @@ function LoginScreen() {
           /* ignore private-mode / quota */
         }
         signIn(data.name || email.split("@")[0] || "there", email.trim());
+        // Sent here by a "Reconnect to Miva" prompt: go back to that page.
+        // Same-site paths only; "//host" would be an open redirect.
+        const next = new URLSearchParams(window.location.search).get("next");
+        if (next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")) {
+          router.push(next);
+        }
       } else {
         setError(data?.error || "We couldn't log you in. Check your details and try again.");
       }

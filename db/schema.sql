@@ -183,3 +183,19 @@ CREATE TABLE IF NOT EXISTS curriculum (
 
 CREATE INDEX IF NOT EXISTS curriculum_student_idx
   ON curriculum (author_hash, level, semester);
+
+-- Revoked sessions (#6). Logout writes the id of each sealed cookie it clears
+-- (the 2-hour Moodle session and the 30-day identity session); unsealing a
+-- cookie whose id is listed fails. sid_hash is a SHA-256 of a random id that
+-- lives only inside the encrypted cookie: no author hash, no user, nothing
+-- that links a row to a person. expires_at is the session's own expiry; rows
+-- past it protect nothing and are trimmed on the next logout. If this table is
+-- missing or the database is down, lookups fail OPEN (see lib/revocation.ts).
+CREATE TABLE IF NOT EXISTS revoked_sessions (
+  sid_hash    TEXT        PRIMARY KEY,
+  revoked_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at  TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS revoked_sessions_expires_idx
+  ON revoked_sessions (expires_at);

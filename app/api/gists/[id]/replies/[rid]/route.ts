@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
-import { sessionAuthorHash } from "@/lib/store/authorHash";
+import { getAuthorHash } from "@/lib/identity";
 import { updateReply, deleteReply, normalizeBody, MAX_BODY } from "@/lib/store/gists";
 import { getUsername } from "@/lib/store/users";
 
@@ -12,8 +11,8 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: { id: string; rid: string } };
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to edit." }, { status: 401 });
   }
 
@@ -32,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     );
   }
 
-  const hash = sessionAuthorHash(session);
+  const hash = author;
   // A reply's author always has a handle (required to reply); fall back defensively.
   const username = (await getUsername(hash)) ?? "Anonymous";
   const reply = await updateReply(params.rid, hash, body, username);
@@ -43,11 +42,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 }
 
 export async function DELETE(req: NextRequest, { params }: Ctx) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to delete." }, { status: 401 });
   }
-  const ok = await deleteReply(params.rid, sessionAuthorHash(session));
+  const ok = await deleteReply(params.rid, author);
   if (!ok) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }

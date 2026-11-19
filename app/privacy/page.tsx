@@ -41,6 +41,12 @@ export default function PrivacyPage() {
             {`The session that logging in produces is encrypted and kept in a cookie in your own browser. Your browser never sees the raw underlying session, and it expires on its own (currently after about two hours).`}
           </li>
           <li>
+            {`So you don't have to type your password every day, logging in also sets a second encrypted cookie that only says "this is the same anonymous student as before". It holds a one-way code (not your email or name), a random session number and the time it was issued, and nothing from your learning platform. It lasts 30 days. Anything that acts on your learning platform, such as Autopilot or the study pack, still needs the two-hour session, so after that you'll be asked to reconnect.`}
+          </li>
+          <li>
+            {`Logging out ends both sessions: it clears the cookies, adds their random session numbers to a list of revoked sessions so a copy of either cookie stops working, and asks your learning platform to end its session too. That list holds only a scrambled form of those random numbers and an expiry date, nothing that identifies you. If our database is briefly unavailable when you log out, the cookies are still cleared, but a copy taken before logout keeps working until it expires on its own.`}
+          </li>
+          <li>
             {`We don't track you across the web. The only thing we ever store about you is a username, and only if you choose to pick one (see below) — never your email, password, or real name.`}
           </li>
         </ul>
@@ -136,7 +142,7 @@ export default function PrivacyPage() {
         <h2 className="doc-title">You&apos;re in control</h2>
         <ul className="doc-list">
           <li>{`Stop using the Service at any time — there's no account to close.`}</li>
-          <li>{`Clear your browser data to remove everything stored on your device and to end your session.`}</li>
+          <li>{`Log out (top of the page, or in the menu on a phone) to end your sessions, or clear your browser data to remove everything stored on your device.`}</li>
           <li>{`Don't post to community spaces if you'd rather leave nothing behind there.`}</li>
         </ul>
       </div>

@@ -119,3 +119,35 @@ export function parseForumTexts(raw: string): string[] {
   }
   return out.slice(0, 20);
 }
+
+/**
+ * The student's own Gemini API key, for creating practice questions. Kept only
+ * in this browser's localStorage and sent, per request, to our server, which
+ * passes it to Google for that one call and does not keep it. Per device, not
+ * per login: it is the student's Google key, not their Miva account's.
+ */
+const GEMINI_KEY = "miva-cliq-gemini-key";
+
+export function loadGeminiKey(): string {
+  try {
+    return localStorage.getItem(GEMINI_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveGeminiKey(key: string): void {
+  try {
+    localStorage.setItem(GEMINI_KEY, key.trim());
+  } catch {
+    /* ignore quota / privacy mode */
+  }
+}
+
+export function clearGeminiKey(): void {
+  try {
+    localStorage.removeItem(GEMINI_KEY);
+  } catch {
+    /* ignore */
+  }
+}

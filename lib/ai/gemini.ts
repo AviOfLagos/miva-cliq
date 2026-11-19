@@ -73,3 +73,61 @@ export async function geminiComplete(
   }
   return null;
 }
+
+export type KeyedResult =
+  | { ok: true; text: string }
+  /** httpStatus 0 = network error or timeout. `body` is Google's parsed error, for classification only: never log or echo it. */
+  | { ok: false; httpStatus: number; body: unknown };
+
+/**
+ * One completion with a key the caller supplies (a student's own key), not the
+ * server's. The key goes in the x-goog-api-key header rather than the URL, so it
+ * cannot turn up in a logged URL, and it is not kept, logged or returned.
+ * No retry on 429: with a student's free key that is their quota, and the
+ * caller maps it to a plain message instead.
+ */
+export async function geminiCompleteWithKey(
+  key: string,
+  prompt: string,
+  opts: { schema?: object; maxOutputTokens?: number; temperature?: number; timeoutMs?: number } = {},
+): Promise<KeyedResult> {
+  const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+  const generationConfig: any = {
+    temperature: opts.temperature ?? 0.7,
+    maxOutputTokens: opts.maxOutputTokens ?? 8192,
+  };
+  if (opts.schema) {
+    generationConfig.responseMimeType = "application/json";
+    generationConfig.responseSchema = toGeminiSchema(opts.schema);
+  }
+  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig });
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let r: Response;
+    try {
+      r = await fetch(`${API}/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": key },
+        body,
+        cache: "no-store",
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 45_000),
+      });
+    } catch {
+      return { ok: false, httpStatus: 0, body: null };
+    }
+    if (r.status >= 500 && attempt === 0) {
+      await sleep(800);
+      continue;
+    }
+    const j = (await r.json().catch(() => null)) as any;
+    if (!r.ok) return { ok: false, httpStatus: r.status, body: j };
+    const parts: any[] = j?.candidates?.[0]?.content?.parts ?? [];
+    const text = parts
+      .filter((p) => !p?.thought)
+      .map((p) => (typeof p?.text === "string" ? p.text : ""))
+      .join("")
+      .trim();
+    return text ? { ok: true, text } : { ok: false, httpStatus: 200, body: null };
+  }
+  return { ok: false, httpStatus: 503, body: null };
+}

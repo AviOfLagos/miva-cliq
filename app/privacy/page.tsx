@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "What Miva Cliq processes, what it never stores, and what lives only on your device.",
 };
 
-const LAST_UPDATED = "17 July 2026";
+const LAST_UPDATED = "19 November 2026";
 
 /**
  * Describes the data behaviour the code actually implements (lib/session,
@@ -41,7 +41,7 @@ export default function PrivacyPage() {
             {`The session that logging in produces is encrypted and kept in a cookie in your own browser. Your browser never sees the raw underlying session, and it expires on its own (currently after about two hours).`}
           </li>
           <li>
-            {`We don't track you across the web. The only thing we ever store about you is a username, and only if you choose to pick one (see below) — never your email, password, or real name.`}
+            {`We don't track you across the web, and we never store your email, password, or real name. The only readable profile is a username, and only if you choose to pick one (see below). Other records, like your practice answers, are tied to a one-way hash rather than to you by name (see sections 3 and 7).`}
           </li>
         </ul>
       </div>
@@ -50,7 +50,7 @@ export default function PrivacyPage() {
         <span className="badge badge-custom">2. WHAT STAYS ON YOUR DEVICE</span>
         <h2 className="doc-title">Your history is local</h2>
         <p className="doc-body">
-          {`Your run history, your saved forum reply messages, and similar preferences are stored in your browser's local storage on the device you're using. They are not uploaded to us. Clear your browser data and they're gone. If you use a shared device, anyone using that browser could see them.`}
+          {`Your run history, your saved forum reply messages, your Gemini key if you add one, and similar preferences are stored in your browser's local storage on the device you're using. They are not stored by us. Clear your browser data and they're gone. If you use a shared device, anyone using that browser could see them.`}
         </p>
       </div>
 
@@ -114,17 +114,37 @@ export default function PrivacyPage() {
       </div>
 
       <div className="card doc-card">
-        <span className="badge badge-custom">7. THIRD PARTIES</span>
+        <span className="badge badge-custom">7. PRACTICE &amp; YOUR GEMINI KEY</span>
+        <h2 className="doc-title">Your answers, and a key we don&apos;t keep</h2>
+        <ul className="doc-list">
+          <li>
+            {`When you open a course on the Study page, we save that course's week titles and topic names (course information from the learning platform, nothing about you) so practice questions can be made for it later.`}
+          </li>
+          <li>
+            {`When you answer a practice question, we record the question, whether you got it right, and when, keyed to the same one-way hash as above. That is what brings missed questions back after 1, 3 and 7 days, and what future streaks and progress features will count. It is never shown to other students as yours.`}
+          </li>
+          <li>
+            {`Questions you create are saved for everyone on that course, along with the one-way hash of who created them (for abuse control, never shown). If you report a question, we store that report against the same hash so each person counts once.`}
+          </li>
+          <li>
+            {`If you add a Gemini API key, it is kept only in your browser's local storage. When you create questions or test the key, your browser sends it to our server with that single request, and our server passes it to Google to make that call. We do not save the key in any database, file or log, and we never use it for anything else. Google handles that call under its own terms, and it counts against your own free limit. You can remove the key from this browser at any time, or delete it in Google AI Studio.`}
+          </li>
+        </ul>
+      </div>
+
+      <div className="card doc-card">
+        <span className="badge badge-custom">8. THIRD PARTIES</span>
         <h2 className="doc-title">Who else is involved</h2>
         <ul className="doc-list">
           <li>{`Hosting and storage providers run the servers and databases the Service uses. Your requests pass through them.`}</li>
           <li>{`Your learning platform (the LMS) receives the logins and actions you instruct the Service to perform, exactly as if you did them yourself.`}</li>
+          <li>{`Google (Gemini) receives the course outline and your own key when you choose to create practice questions or test a key. Nothing about you is in that request beyond the key itself.`}</li>
           <li>{`If advertising is added in future, an ad provider may collect data through your browser under its own policy. We'll note it here if and when that happens.`}</li>
         </ul>
       </div>
 
       <div className="card doc-card">
-        <span className="badge badge-preset">8. SECURITY — HONESTLY</span>
+        <span className="badge badge-preset">9. SECURITY — HONESTLY</span>
         <h2 className="doc-title">We try, but we can&apos;t promise</h2>
         <p className="doc-body">
           {`We take reasonable steps to protect the Service and to hold as little of your data as possible. But no system is ever 100% safe from attackers, and we cannot and do not guarantee that the Service is secure. If your own device, browser, or network is already compromised, an attacker there may be able to access your data regardless of anything we do. You use the Service at your own risk.`}
@@ -132,7 +152,7 @@ export default function PrivacyPage() {
       </div>
 
       <div className="card doc-card">
-        <span className="badge badge-preset">9. YOUR CHOICES</span>
+        <span className="badge badge-preset">10. YOUR CHOICES</span>
         <h2 className="doc-title">You&apos;re in control</h2>
         <ul className="doc-list">
           <li>{`Stop using the Service at any time — there's no account to close.`}</li>
@@ -142,7 +162,7 @@ export default function PrivacyPage() {
       </div>
 
       <div className="card doc-card">
-        <span className="badge badge-preset">10. CHANGES &amp; CONTACT</span>
+        <span className="badge badge-preset">11. CHANGES &amp; CONTACT</span>
         <h2 className="doc-title">Updates</h2>
         <p className="doc-body">
           {`We may update this policy by posting a new version here. Continuing to use the Service after a change means you accept it. Questions can be sent to the operator at the contact address shared with you when you were given access.`}

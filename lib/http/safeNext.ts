@@ -18,5 +18,8 @@ export function safeNextPath(next: string | null | undefined, origin: string): s
   }
   if (u.origin !== new URL(origin).origin) return null;
   if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-  return u.pathname + u.search;
+  // "/.//evil.com" is same-origin but normalises to the path "//evil.com",
+  // which a router treats as protocol-relative. Collapse leading slashes.
+  const path = "/" + u.pathname.replace(/^[/\\]+/, "");
+  return path + u.search;
 }

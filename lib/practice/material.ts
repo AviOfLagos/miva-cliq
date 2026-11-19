@@ -119,22 +119,100 @@ export function isInlinePdf(f: { filename: string; contentType: string; size: nu
   return pdf && f.size > 0 && f.size <= MAX_FILE_BYTES;
 }
 
+/** A bullet line: "- ", "* ", "• " or "1. " / "1) ". */
+const BULLET = /^(?:[-*•]|\d{1,2}[.)])\s+(.+)$/;
+/** A heading line: "## Loops" or "Loops:". */
+const HEADING_HASH = /^#{1,4}\s+(.+)$/;
+export const MAX_NOTE_LINE_CHARS = 300;
+export const MAX_HEADING_CHARS = 80;
+
 /**
- * The model's notes, made safe to save and to quote in a later prompt: plain
- * text, no tags or URLs, no delimiter sequences, sane spacing, capped.
- * Returns "" when there is nothing worth keeping.
+ * Lines that talk to a model rather than about the course. Saved notes are
+ * shared with every student and quoted into later prompts, so anything that
+ * reads like an instruction is dropped, even at the cost of the odd real line.
+ */
+const ADDRESSES_MODEL =
+  /\b(ignore|disregard|forget|override|bypass|jailbreak)\b|\binstructions?\b|\bsystem\s+prompt\b|\bprompt\b|\byou\s+are\b|\byou\s+must\b|\bas\s+an\s+ai\b|\b(language|ai)\s+model\b|\bassistant\b|\bchatgpt\b|\bgemini\b|\brespond\s+(only\s+)?with\b|\breturn\s+only\b|\bnew\s+task\b|\bdeveloper\s+mode\b/i;
+
+/** The prompt's own block markers, with or without their angle brackets. */
+const DELIMITERS = /<<<|>>>|\b(OUTLINE|MATERIAL|NOTES|EXISTING)\s*(>>>|<<<)|(<<<|>>>)\s*(OUTLINE|MATERIAL|NOTES|EXISTING)\b/g;
+
+/**
+ * The model's notes, made safe to save, share and quote in a later prompt.
+ * Only short bullet lines ("- point") and short heading lines ("Topic:") are
+ * kept, normalised to "- " bullets and "Heading:" lines. Tags, URLs, the
+ * prompt delimiters and any line addressing a model are removed. Returns ""
+ * when there is nothing worth keeping.
  */
 export function cleanNotes(raw: unknown): string {
   if (typeof raw !== "string") return "";
-  const s = raw
-    .replace(/<[^>]*>/g, " ")
-    .replace(/https?:\/\/\S+/g, " ")
-    .replace(/<<<|>>>/g, " ")
-    .replace(/\r/g, "")
-    .split("\n")
-    .map((l) => l.replace(/[ \t]+/g, " ").trim())
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const kept: string[] = [];
+  for (const rawLine of raw.replace(/\r/g, "").split("\n")) {
+    const line = rawLine
+      .replace(/<[^>]*>/g, " ")
+      .replace(/https?:\/\/\S+/g, " ")
+      .replace(DELIMITERS, " ")
+      .replace(/[<>]{2,}/g, " ")
+      .replace(/[ \t]+/g, " ")
+      .trim();
+    if (!line || ADDRESSES_MODEL.test(line)) continue;
+    const bullet = line.match(BULLET);
+    if (bullet) {
+      const text = bullet[1].trim();
+      if (text.length >= 3 && text.length <= MAX_NOTE_LINE_CHARS) kept.push(`- ${text}`);
+      continue;
+    }
+    const hash = line.match(HEADING_HASH);
+    const heading = hash ? hash[1].trim().replace(/:$/, "") : /:$/.test(line) ? line.slice(0, -1).trim() : null;
+    if (heading && heading.length >= 2 && heading.length <= MAX_HEADING_CHARS && !/[.!?]$/.test(heading)) {
+      kept.push(`${heading}:`);
+    }
+    // Anything else (prose paragraphs, long lines) is dropped.
+  }
+  // A heading with no bullets under it adds nothing.
+  const lines = kept.filter((l, i) => l.startsWith("- ") || (kept[i + 1] ?? "").startsWith("- "));
+  const s = lines.join("\n");
   return s.length < 80 ? "" : capAtLine(s, MAX_NOTES_CHARS);
+}
+
+/** Saved notes, made safe again on the way into a prompt (rows written before this rule). */
+export const notesForPrompt = cleanNotes;
+
+/* --------------------------------------------------------- file budget --- */
+
+/**
+ * The PDFs one gather may send inline, shared by concurrent downloads: a file
+ * is only fetched while there is room, and only kept if it still fits, so no
+ * bytes are held that will not be used.
+ */
+export class InlineBudget {
+  private files = 0;
+  private bytes = 0;
+  private pending = 0;
+  constructor(
+    readonly maxFiles: number = MAX_PDFS,
+    readonly maxBytes: number = MAX_INLINE_TOTAL_BYTES,
+  ) {}
+  /** No room left for another file: stop fetching. */
+  full(): boolean {
+    return this.files + this.pending >= this.maxFiles || this.bytes >= this.maxBytes;
+  }
+  /** Largest file still worth downloading. */
+  room(): number {
+    return Math.max(0, Math.min(MAX_FILE_BYTES, this.maxBytes - this.bytes));
+  }
+  /** Claim a download slot before fetching. False = do not fetch. */
+  begin(): boolean {
+    if (this.full()) return false;
+    this.pending += 1;
+    return true;
+  }
+  /** Finish a download: true if the file fits and is kept. */
+  end(size: number | null): boolean {
+    this.pending = Math.max(0, this.pending - 1);
+    if (size === null || size <= 0 || this.files >= this.maxFiles || this.bytes + size > this.maxBytes) return false;
+    this.files += 1;
+    this.bytes += size;
+    return true;
+  }
 }

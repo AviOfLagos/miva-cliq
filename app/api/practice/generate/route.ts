@@ -8,9 +8,13 @@
  * shortfall rounded up to ten), validates each one and saves the survivors for everyone. What the batch is
  * written from, best first:
  *
- *   1. Saved week notes: no LMS access at all.
+ * The rate-limit slot is reserved atomically before any of this; if it cannot
+ * be reserved (no database, a failed query) the LMS is not read.
+ *
+ *   1. Saved week notes, if under 7 days old: no LMS access at all.
  *   2. The week's real material, when the student is connected to the LMS and
- *      enrolled in `courseId`: page text and small PDFs are gathered here,
+ *      enrolled in `courseId` (and for notes over 7 days old, which this
+ *      replaces): page text and small PDFs are gathered here,
  *      server-side, and ONE call returns condensed notes plus the questions.
  *      The notes are saved; the material is not.
  *   3. The saved outline's titles, as before.
@@ -37,7 +41,15 @@ import {
 } from "@/lib/practice/generate";
 import { cleanNotes } from "@/lib/practice/material";
 import { enrolledCourse, gatherWeekMaterial } from "@/lib/practice/gather";
-import { BURST_SECONDS, DAY_SECONDS, generationVerdict, LIMIT_MESSAGES } from "@/lib/practice/limits";
+import {
+  BURST_SECONDS,
+  DAY_SECONDS,
+  GEN_PER_BURST,
+  GEN_PER_DAY,
+  generationVerdict,
+  LIMIT_MESSAGES,
+  planSource,
+} from "@/lib/practice/limits";
 import {
   getOutline,
   getWeekNotes,
@@ -47,7 +59,7 @@ import {
   weekBank,
   weekHashes,
 } from "@/lib/store/practice";
-import { rateCounts, recordRateEvent } from "@/lib/store/rateLimit";
+import { rateCounts, reserveRateSlot } from "@/lib/store/rateLimit";
 import { getLmsSession } from "@/lib/identity";
 import {
   badRequest,
@@ -123,46 +135,63 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const [burst, day] = await rateCounts(student, "practice-gen", [BURST_SECONDS, DAY_SECONDS]);
-    const verdict = generationVerdict({ burst, day });
-    if (!verdict.ok) {
-      return NextResponse.json({ error: LIMIT_MESSAGES[verdict.reason], limited: verdict.reason }, { status: 429 });
+    // Take the rate-limit slot now, atomically, before any LMS or Gemini work,
+    // so parallel requests cannot all slip past the check. The slot is the
+    // record: a call that fails still counts, as it always has (the limit
+    // protects the student's quota too).
+    const reservation = await reserveRateSlot(student, "practice-gen", [
+      { seconds: BURST_SECONDS, limit: GEN_PER_BURST },
+      { seconds: DAY_SECONDS, limit: GEN_PER_DAY },
+    ]);
+    const session = courseId && reservation === "reserved" ? await getLmsSession(req) : null;
+    const plan = planSource({
+      reservation,
+      notesUpdatedAt: notes ? notes.updatedAt : null,
+      canReadLms: !!session && !!courseId,
+      now: Date.now(),
+    });
+    if (plan.kind === "limited") {
+      const [burst, day] = await rateCounts(student, "practice-gen", [BURST_SECONDS, DAY_SECONDS]);
+      const verdict = generationVerdict({ burst, day });
+      const reason = verdict.ok ? "burst" : verdict.reason;
+      return NextResponse.json({ error: LIMIT_MESSAGES[reason], limited: reason }, { status: 429 });
     }
 
     const existing = bank.map((q) => q.question);
     const count = batchSizeFor(bank.length);
-    let prompt: string;
     let schema: object = BATCH_SCHEMA;
     let inline: { mimeType: string; data: string }[] = [];
     let source: "notes" | "material" | "outline" = "outline";
     let sourceCount = 0;
+    let prompt: string | null = null;
 
-    if (notes) {
-      prompt = buildNotesPrompt(outline, notes, count, existing);
-      source = "notes";
-    } else {
-      prompt = buildGenerationPrompt(outline, count, existing);
-      const session = courseId ? await getLmsSession(req) : null;
-      if (session && courseId) {
-        const gatherEnd = Math.min(started + GATHER_MS, started + BUDGET_MS - MIN_MODEL_MS);
-        if (await enrolledCourse(session, courseId, courseCode, gatherEnd)) {
-          const m = await gatherWeekMaterial(session, courseId, week, gatherEnd);
-          if (m.texts.length || m.pdfs.length) {
-            prompt = buildMaterialPrompt(outline, { texts: m.texts, pdfCount: m.pdfs.length }, count, existing);
-            schema = NOTES_BATCH_SCHEMA;
-            inline = m.pdfs;
-            source = "material";
-            sourceCount = m.sourceCount;
-          }
+    if (plan.kind === "material" && session && courseId) {
+      const gatherEnd = Math.min(started + GATHER_MS, started + BUDGET_MS - MIN_MODEL_MS);
+      if (await enrolledCourse(session, courseId, courseCode, gatherEnd)) {
+        const m = await gatherWeekMaterial(session, courseId, week, gatherEnd);
+        if (m.texts.length || m.pdfs.length) {
+          prompt = buildMaterialPrompt(outline, { texts: m.texts, pdfCount: m.pdfs.length }, count, existing);
+          schema = NOTES_BATCH_SCHEMA;
+          inline = m.pdfs;
+          source = "material";
+          sourceCount = m.sourceCount;
         }
+      }
+    }
+    if (!prompt) {
+      // Saved notes are cleaned again on the way in, in case a row predates the current rules.
+      const safeNotes = notes ? cleanNotes(notes.notes) : "";
+      if (safeNotes && (plan.kind === "notes" || (plan.kind === "material" && plan.fallback === "notes"))) {
+        prompt = buildNotesPrompt(outline, safeNotes, count, existing);
+        source = "notes";
+      } else {
+        prompt = buildGenerationPrompt(outline, count, existing);
       }
     }
 
     const timeoutMs = Math.max(MIN_MODEL_MS, started + BUDGET_MS - Date.now());
     const result = await geminiCompleteWithKey(key, prompt, { schema, inline, timeoutMs, maxOutputTokens: MAX_OUTPUT_TOKENS });
     inline = [];
-    // Count every call made with the key, successful or not: the limit protects their quota too.
-    await recordRateEvent(student, "practice-gen");
 
     if (!result.ok) {
       const kind = result.httpStatus === 0 ? "unavailable" : classifyGeminiError(result.httpStatus, result.body);

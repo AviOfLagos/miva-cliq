@@ -268,7 +268,7 @@ CREATE INDEX IF NOT EXISTS revoked_sessions_expires_idx
 -- no embeddings, no raw page text, just notes capped at about 6,000 characters.
 -- Retrieval is by exact course + week, so there is no vector index.
 -- source_count = how many pages/files the notes were built from (a later save
--- replaces a row only when built from more). author_hash is who generated them
+-- replaces a row when built from more, or when the row is over 7 days old). author_hash is who generated them
 -- (abuse control) and is never returned. If this table is missing, generation
 -- falls back to the week's material or its outline, and nothing fails.
 CREATE TABLE IF NOT EXISTS week_notes (

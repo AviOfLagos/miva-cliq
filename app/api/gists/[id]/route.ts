@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
-import { sessionAuthorHash } from "@/lib/store/authorHash";
+import { getAuthorHash } from "@/lib/identity";
 import { storeEnabled } from "@/lib/store/db";
 import {
   getGist,
@@ -27,14 +26,14 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   if (!gist) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  const mine = session ? await ownsGist(params.id, sessionAuthorHash(session)) : false;
+  const author = await getAuthorHash(req);
+  const mine = author ? await ownsGist(params.id, author) : false;
   return NextResponse.json({ gist, mine });
 }
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to edit." }, { status: 401 });
   }
   if (!storeEnabled()) {
@@ -58,7 +57,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const category = isCategory(payload?.category) ? payload.category : DEFAULT_CATEGORY;
   const department = isDepartment(payload?.department) ? payload.department : null;
 
-  const hash = sessionAuthorHash(session);
+  const hash = author;
   const showAuthor = payload?.showAuthor === true;
   if (showAuthor && !(await getUsername(hash))) {
     return NextResponse.json({ error: "username_required" }, { status: 409 });
@@ -79,11 +78,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 }
 
 export async function DELETE(req: NextRequest, { params }: Ctx) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to delete." }, { status: 401 });
   }
-  const ok = await deleteGist(params.id, sessionAuthorHash(session));
+  const ok = await deleteGist(params.id, author);
   if (!ok) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }

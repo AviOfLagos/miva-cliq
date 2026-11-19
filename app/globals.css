@@ -1954,6 +1954,106 @@ input:disabled {
   }
 }
 
+/* Log out is a button styled as a nav link. */
+button.topnav-link {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+button.topnav-link:hover,
+button.topnav-link:focus-visible {
+  background: var(--surface-2);
+}
+
+/* Small-screen menu: the button and panel exist only below 720px. */
+.topnav-menu-btn {
+  display: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.topnav-menu-btn:hover {
+  border-color: var(--border-strong);
+}
+
+.topnav-menu-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+}
+
+.topnav-menu-btn[aria-expanded="true"] {
+  border-color: var(--accent-border);
+}
+
+.topnav-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% - 8px);
+  left: clamp(16px, 4vw, 40px);
+  right: clamp(16px, 4vw, 40px);
+  z-index: 3;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-lg);
+}
+
+.topnav-menu nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topnav-menu-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  text-align: left;
+  width: 100%;
+}
+
+button.topnav-link.topnav-menu-link {
+  font-size: 1rem;
+}
+
+.topnav-menu-link:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+}
+
+/* After the base rules above, so these win at the same specificity. */
+@media (max-width: 720px) {
+  /* Log out moves into the menu with the other links. */
+  .topnav-logout {
+    display: none;
+  }
+
+  .topnav-menu-btn {
+    display: inline-grid;
+  }
+
+  .topnav-menu {
+    display: flex;
+  }
+}
+
 /* ---- doc pages (how it works) ------------------------------------ */
 
 .doc-wrap {

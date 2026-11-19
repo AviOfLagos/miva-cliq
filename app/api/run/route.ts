@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
+import { getLmsSession } from "@/lib/identity";
 import { runCourse } from "@/lib/completion/engine";
 import { tallyOutcome, recordOutcomes, type OutcomeTally } from "@/lib/store/completionStats";
 
@@ -24,7 +24,7 @@ const MAX_SETTLED = 5000;
  *   event: error     data:{message}
  */
 export async function POST(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
+  const session = await getLmsSession(req);
   if (!session) {
     return new Response("event: error\ndata: {\"message\":\"Not logged in.\"}\n\n", {
       status: 401,

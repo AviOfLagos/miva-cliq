@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
-import { sessionAuthorHash } from "@/lib/store/authorHash";
+import { getAuthorHash } from "@/lib/identity";
 import { rateLimit, recordRateEvent, clientIp } from "@/lib/store/rateLimit";
 import { storeEnabled } from "@/lib/store/db";
 import { createGist, listGists, normalizeBody, MAX_BODY } from "@/lib/store/gists";
@@ -34,8 +33,8 @@ export async function GET(req: NextRequest) {
 
 /** Posting is login-gated: anonymous to readers, not anonymous to the rate limiter. */
 export async function POST(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to post a gist." }, { status: 401 });
   }
   if (!storeEnabled()) {
@@ -64,7 +63,7 @@ export async function POST(req: NextRequest) {
   // Department is optional by design — see the anonymity note in db/schema.sql.
   const department = isDepartment(payload?.department) ? payload.department : null;
 
-  const hash = sessionAuthorHash(session);
+  const hash = author;
 
   // Posting under your name needs a handle. Anonymous posts don't.
   const showAuthor = payload?.showAuthor === true;

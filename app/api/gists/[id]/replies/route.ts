@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
-import { sessionAuthorHash } from "@/lib/store/authorHash";
+import { getAuthorHash } from "@/lib/identity";
 import { rateLimit, recordRateEvent, clientIp } from "@/lib/store/rateLimit";
 import { storeEnabled } from "@/lib/store/db";
 import {
@@ -24,16 +23,16 @@ type Ctx = { params: { id: string } };
 export async function GET(req: NextRequest, { params }: Ctx) {
   const replies = await listReplies(params.id);
   // Mark which replies belong to the viewer so the UI can show edit controls.
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  const mine = session
-    ? await ownedReplyIds(params.id, sessionAuthorHash(session))
+  const author = await getAuthorHash(req);
+  const mine = author
+    ?await ownedReplyIds(params.id, author)
     : [];
   return NextResponse.json({ replies, mine });
 }
 
 export async function POST(req: NextRequest, { params }: Ctx) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to reply." }, { status: 401 });
   }
   if (!storeEnabled()) {
@@ -58,7 +57,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     );
   }
 
-  const hash = sessionAuthorHash(session);
+  const hash = author;
 
   // Replies are never anonymous — a handle is required to leave one.
   const username = await getUsername(hash);

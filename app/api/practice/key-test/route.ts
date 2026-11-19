@@ -22,7 +22,7 @@ const TESTS_PER_HOUR = 10;
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return crossSite();
   // Login-gated so this can't be used as an open key checker.
-  const student = studentKey(req);
+  const student = await studentKey(req);
   if (!student) return notLoggedIn();
   const key = geminiKeyFrom(req);
   if (!key) {

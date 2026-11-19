@@ -3,7 +3,8 @@ import { login, LoginError } from "@/lib/moodle/auth";
 import { seal, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS } from "@/lib/session";
 import { recordUser, recordConsent } from "@/lib/store/metrics";
 import { rateLimit, recordRateEvent, clientIp } from "@/lib/store/rateLimit";
-import { authorHash } from "@/lib/store/authorHash";
+import { authorHash, sessionAuthorHash } from "@/lib/store/authorHash";
+import { sealIdentity, IDENTITY_COOKIE, IDENTITY_MAX_AGE_SECONDS } from "@/lib/identity";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -91,6 +92,24 @@ export async function POST(req: NextRequest) {
       // check inside unseal() — this attribute is advisory and client-side.
       maxAge: SESSION_MAX_AGE_SECONDS,
     });
+    // The 30-day identity cookie: the anonymous author hash plus a session id,
+    // nothing from Moodle (lib/identity.ts). It keeps the student signed in for
+    // study pages after the two-hour Moodle session above has lapsed. If the
+    // hash can't be computed (no salt), the student still gets the Moodle
+    // session and simply isn't remembered past it.
+    try {
+      const { blob } = sealIdentity(sessionAuthorHash(session));
+      res.cookies.set(IDENTITY_COOKIE, blob, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        // Advisory, like the one above; unsealIdentity() enforces the 30 days.
+        maxAge: IDENTITY_MAX_AGE_SECONDS,
+      });
+    } catch {
+      /* see above */
+    }
     return res;
   } catch (e) {
     const err = e as LoginError;

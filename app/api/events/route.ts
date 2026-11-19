@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
-import { sessionAuthorHash } from "@/lib/store/authorHash";
+import { getAuthorHash } from "@/lib/identity";
 import { rateLimit, recordRateEvent, clientIp } from "@/lib/store/rateLimit";
 import { storeEnabled } from "@/lib/store/db";
 import { normalizeBody } from "@/lib/store/gists";
@@ -33,8 +32,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to post an event." }, { status: 401 });
   }
   if (!storeEnabled()) {
@@ -96,7 +95,7 @@ export async function POST(req: NextRequest) {
 
   const department = isDepartment(payload?.department) ? payload.department : null;
 
-  const hash = sessionAuthorHash(session);
+  const hash = author;
   const showAuthor = payload?.showAuthor === true;
   const username = showAuthor ? await getUsername(hash) : null;
   if (showAuthor && !username) {

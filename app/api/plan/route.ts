@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
+import { getLmsSession } from "@/lib/identity";
 import { listCourses, resolveCourses, type Course } from "@/lib/moodle/courses";
 import { plan } from "@/lib/completion/engine";
 import { getPreset } from "@/lib/presets";
@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
+  const session = await getLmsSession(req);
   if (!session) {
     return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   }

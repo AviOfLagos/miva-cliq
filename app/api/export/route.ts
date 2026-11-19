@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
+import { getLmsSession } from "@/lib/identity";
 import { listCourses } from "@/lib/moodle/courses";
 import { buildPack, planPack } from "@/lib/export/coursePack";
 import { rateLimit, recordRateEvent, clientIp } from "@/lib/store/rateLimit";
@@ -20,7 +20,7 @@ const HOUR = 3600;
  * the quiz reader open (never submit) an attempt on quizzes never taken.
  */
 export async function GET(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
+  const session = await getLmsSession(req);
   if (!session) {
     return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   }

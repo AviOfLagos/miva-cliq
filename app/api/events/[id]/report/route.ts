@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
-import { sessionAuthorHash } from "@/lib/store/authorHash";
+import { getAuthorHash } from "@/lib/identity";
 import { reportTarget } from "@/lib/store/gists";
 
 export const runtime = "nodejs";
@@ -9,12 +8,12 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: { id: string } };
 
 export async function POST(req: NextRequest, { params }: Ctx) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to report." }, { status: 401 });
   }
 
-  const result = await reportTarget("event", params.id, sessionAuthorHash(session));
+  const result = await reportTarget("event", params.id, author);
   if (!result) {
     return NextResponse.json({ error: "That event is gone." }, { status: 404 });
   }

@@ -3,7 +3,7 @@ import { listCourses, codeOf } from "@/lib/moodle/courses";
 import { getCourseState } from "@/lib/moodle/activities";
 import { listAnswers } from "@/lib/store/quizAnswers";
 import { storeEnabled } from "@/lib/store/db";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
+import { getLmsSession } from "@/lib/identity";
 import { cleanWeekTitle, topicsFromActivities, type SampleQuestion } from "@/lib/study/prompts";
 import { saveOutline, weekCounts } from "@/lib/store/practice";
 
@@ -31,7 +31,7 @@ export type StudyWeekData = {
  * questions can be generated later without asking the LMS again.
  */
 export async function GET(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
+  const session = await getLmsSession(req);
   if (!session) {
     return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   }

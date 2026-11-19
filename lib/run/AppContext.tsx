@@ -83,7 +83,10 @@ type AppValue = {
   answerQuizzes: boolean;
   setAnswerQuizzes: (on: boolean) => void;
   /* community identity (Gists/Events) */
-  authed: boolean; // has a valid Miva session cookie (can post)
+  authed: boolean; // signed in: valid identity (30-day) or Miva session (can post, study)
+  lmsConnected: boolean; // valid Miva (Moodle) session: Autopilot, course list, study pack
+  meLoaded: boolean; // /api/me has answered at least once
+  logOut: () => Promise<void>;
   username: string | null; // chosen handle, null = none yet
   setUsername: (u: string | null) => void;
   refreshMe: () => void;
@@ -106,21 +109,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /* ---- community identity (independent of the /cliq login screen) ---- */
   const [authed, setAuthed] = useState(false);
+  const [lmsConnected, setLmsConnected] = useState(false);
+  const [meLoaded, setMeLoaded] = useState(false);
   const [username, setUsernameState] = useState<string | null>(null);
-  // Ask the server who we are: 200 => logged in (cookie valid), body carries the
-  // handle (or null). 401 => not logged in. Runs on mount so a direct visit to
-  // /gists still knows the viewer's state without going through /cliq.
+  // Ask the server who we are: 200 => signed in (identity or Miva session valid),
+  // body says whether the Miva session is also live and carries the handle (or
+  // null). 401 => not signed in. Runs on mount so a direct visit to /gists still
+  // knows the viewer's state without going through /cliq.
   const refreshMe = useCallback(() => {
     fetch("/api/me", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d && typeof d === "object") {
           setAuthed(true);
+          // Older responses had no flag; then the Miva session was the only login.
+          setLmsConnected(d.lmsConnected !== false);
           setUsernameState(d.username ?? null);
         } else {
           setAuthed(false);
+          setLmsConnected(false);
           setUsernameState(null);
         }
+        setMeLoaded(true);
       })
       .catch(() => {
         /* leave state as-is on a network blip */
@@ -204,16 +214,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     refreshMe();
   }, [refreshMe]);
 
-  // Called by any request that returns 401 (session lapsed/missing).
-  const onSessionExpired = useCallback((msg?: string) => {
-    runToken.current += 1; // stop any in-flight run
+  // Called by any LMS request that returns 401 (Miva session lapsed/missing).
+  // The 30-day identity may still be valid, so this does not sign the student
+  // out of study pages: it drops the LMS connection and re-asks /api/me.
+  const onSessionExpired = useCallback(
+    (msg?: string) => {
+      runToken.current += 1; // stop any in-flight run
+      setName("");
+      setRunMode(null);
+      setLmsConnected(false);
+      setAuthNotice(msg || "Your Miva connection timed out. Reconnect to Miva to continue.");
+      setScreen("login");
+      refreshMe();
+    },
+    [refreshMe],
+  );
+
+  // Revokes both sessions server-side (#6), then forgets everything here.
+  const logOut = useCallback(async () => {
+    try {
+      await fetch("/api/logout", { method: "POST", credentials: "include" });
+    } catch {
+      /* cookies are cleared server-side; a network failure leaves them, so re-check */
+    }
+    runToken.current += 1;
     setName("");
+    setEmail("");
     setRunMode(null);
-    setAuthed(false);
-    setUsernameState(null);
-    setAuthNotice(msg || "Your session expired. Please log in again.");
+    setAuthNotice(null);
     setScreen("login");
-  }, []);
+    refreshMe();
+  }, [refreshMe]);
 
   /* ---- overall totals ---- */
   const totals = useMemo<Totals>(() => {
@@ -582,6 +613,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     answerQuizzes,
     setAnswerQuizzes,
     authed,
+    lmsConnected,
+    meLoaded,
+    logOut,
     username,
     setUsername,
     refreshMe,

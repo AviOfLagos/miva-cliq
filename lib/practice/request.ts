@@ -3,19 +3,18 @@
  * same-origin check and the student's Gemini key are each read in one place.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
-import { sessionAuthorHash } from "@/lib/store/authorHash";
+import { getAuthorHash } from "@/lib/identity";
 import { isSameOrigin } from "@/lib/http/sameOrigin";
 import { cleanApiKey } from "./core";
 
 /**
- * The anonymous per-student key: the salted HMAC of the Moodle user id from the
- * sealed session, exactly as the gists routes derive it. When a longer-lived
- * identity cookie lands, swap the body of this function and nothing else.
+ * The anonymous per-student key, from lib/identity.ts: the 30-day identity
+ * cookie first, then the Moodle session, both checked against the revocation
+ * list. Practice reads the saved outline, never the LMS, so it only needs
+ * identity and keeps working after the two-hour Moodle session lapses.
  */
-export function studentKey(req: NextRequest): string | null {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  return session ? sessionAuthorHash(session) : null;
+export async function studentKey(req: NextRequest): Promise<string | null> {
+  return getAuthorHash(req);
 }
 
 /** Header the browser sends the student's own Gemini key in. Never logged, stored or echoed. */

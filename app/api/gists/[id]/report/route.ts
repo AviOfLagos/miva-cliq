@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
-import { sessionAuthorHash } from "@/lib/store/authorHash";
+import { getAuthorHash } from "@/lib/identity";
 import { reportTarget } from "@/lib/store/gists";
 
 export const runtime = "nodejs";
@@ -14,12 +13,12 @@ type Ctx = { params: { id: string } };
  * enforced by the reports primary key, so nobody can bury a post they dislike.
  */
 export async function POST(req: NextRequest, { params }: Ctx) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to report." }, { status: 401 });
   }
 
-  const result = await reportTarget("gist", params.id, sessionAuthorHash(session));
+  const result = await reportTarget("gist", params.id, author);
   if (!result) {
     return NextResponse.json({ error: "That gist is gone." }, { status: 404 });
   }

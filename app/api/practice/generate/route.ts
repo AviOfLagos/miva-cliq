@@ -40,7 +40,7 @@ const HOUR = 3600;
 
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return crossSite();
-  const student = studentKey(req);
+  const student = await studentKey(req);
   if (!student) return notLoggedIn();
   const body = await jsonBody(req);
   const courseCode = cleanCourseCode(body?.courseCode);

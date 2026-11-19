@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
-import { sessionAuthorHash } from "@/lib/store/authorHash";
+import { getAuthorHash } from "@/lib/identity";
 import { setUsername, deleteUsername, MIN_LEN, MAX_LEN } from "@/lib/store/users";
 import { rateLimit, recordRateEvent } from "@/lib/store/rateLimit";
 
@@ -11,8 +10,8 @@ const RENAMES_PER_DAY = 5;
 const DAY = 86400;
 
 export async function PUT(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in to set a username." }, { status: 401 });
   }
 
@@ -23,7 +22,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const hash = sessionAuthorHash(session);
+  const hash = author;
 
   // Cap renames so a handle can't be churned to squat names or evade blocks.
   const gate = await rateLimit(hash, "username", RENAMES_PER_DAY, DAY);
@@ -61,10 +60,10 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session) {
+  const author = await getAuthorHash(req);
+  if (!author) {
     return NextResponse.json({ error: "Log in first." }, { status: 401 });
   }
-  await deleteUsername(sessionAuthorHash(session));
+  await deleteUsername(author);
   return NextResponse.json({ ok: true });
 }

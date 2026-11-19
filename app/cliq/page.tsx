@@ -10,6 +10,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { safeNextPath } from "@/lib/http/safeNext";
 import { useApp } from "@/lib/run/AppContext";
 import { loadHistory, latestPerCourse } from "@/lib/run/history";
 import {
@@ -152,11 +153,12 @@ function LoginScreen() {
         }
         signIn(data.name || email.split("@")[0] || "there", email.trim());
         // Sent here by a "Reconnect to Miva" prompt: go back to that page.
-        // Same-site paths only; "//host" would be an open redirect.
-        const next = new URLSearchParams(window.location.search).get("next");
-        if (next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")) {
-          router.push(next);
-        }
+        // Same-origin only (lib/http/safeNext.ts), or it is an open redirect.
+        const next = safeNextPath(
+          new URLSearchParams(window.location.search).get("next"),
+          window.location.origin,
+        );
+        if (next) router.push(next);
       } else {
         setError(data?.error || "We couldn't log you in. Check your details and try again.");
       }

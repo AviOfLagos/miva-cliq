@@ -184,6 +184,67 @@ CREATE TABLE IF NOT EXISTS curriculum (
 CREATE INDEX IF NOT EXISTS curriculum_student_idx
   ON curriculum (author_hash, level, semester);
 
+-- Practice (Stage 3). Everything below degrades cleanly when absent: the
+-- practice routes answer "not available yet" until these tables exist.
+--
+-- Course outline: the weeks and topic names /api/study reads from the LMS,
+-- shared across students and upserted on every read, so generating practice
+-- questions never needs the LMS again. Course-level data only, nobody's identity.
+CREATE TABLE IF NOT EXISTS course_outline (
+  course_code   TEXT        NOT NULL,             -- codeOf() form, e.g. cos202
+  week          INT         NOT NULL,             -- Moodle section number
+  course_title  TEXT        NOT NULL DEFAULT '',
+  week_title    TEXT        NOT NULL DEFAULT '',
+  topics        JSONB       NOT NULL DEFAULT '[]'::jsonb,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (course_code, week)
+);
+
+-- Practice questions, one bank per course-week, generated once with a
+-- student's own Gemini key and then served free to everyone. answer_index and
+-- explanation are never sent before an answer. Status: unconfirmed until 5
+-- distinct students answer with no report, hidden after 3 distinct reports.
+-- question_hash (sha256 of the normalised question) dedupes across batches.
+-- author_hash is the generator (abuse control) and is never returned.
+CREATE TABLE IF NOT EXISTS practice_questions (
+  id             BIGSERIAL   PRIMARY KEY,
+  course_code    TEXT        NOT NULL,
+  week           INT         NOT NULL,
+  question       TEXT        NOT NULL,
+  options        JSONB       NOT NULL CHECK (jsonb_typeof(options) = 'array' AND jsonb_array_length(options) = 4),
+  answer_index   INT         NOT NULL CHECK (answer_index BETWEEN 0 AND 3),
+  explanation    TEXT        NOT NULL DEFAULT '',
+  status         TEXT        NOT NULL DEFAULT 'unconfirmed' CHECK (status IN ('unconfirmed', 'confirmed', 'hidden')),
+  source         TEXT        NOT NULL DEFAULT 'ai' CHECK (source IN ('ai', 'bank')),
+  served_count   INT         NOT NULL DEFAULT 0,
+  answer_count   INT         NOT NULL DEFAULT 0,
+  correct_count  INT         NOT NULL DEFAULT 0,
+  report_count   INT         NOT NULL DEFAULT 0,
+  question_hash  TEXT        NOT NULL UNIQUE,
+  author_hash    TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS practice_questions_week_idx
+  ON practice_questions (course_code, week) WHERE status <> 'hidden';
+
+-- One row per answer. Stage 4 reads this for XP, streaks and spaced
+-- repetition, always per student and by time, hence the index. Reports on
+-- practice questions reuse the reports table above with target_kind 'practice'.
+CREATE TABLE IF NOT EXISTS practice_attempts (
+  id           BIGSERIAL   PRIMARY KEY,
+  author_hash  TEXT        NOT NULL,
+  question_id  BIGINT      NOT NULL REFERENCES practice_questions (id) ON DELETE CASCADE,
+  correct      BOOLEAN     NOT NULL,
+  answered_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS practice_attempts_student_idx
+  ON practice_attempts (author_hash, answered_at DESC);
+
+CREATE INDEX IF NOT EXISTS practice_attempts_question_idx
+  ON practice_attempts (question_id, author_hash);
+
 -- Revoked sessions (#6). Logout writes the id of each sealed cookie it clears
 -- (the 2-hour Moodle session and the 30-day identity session); unsealing a
 -- cookie whose id is listed fails. sid_hash is a SHA-256 of a random id that

@@ -3,8 +3,9 @@ import { listCourses, codeOf } from "@/lib/moodle/courses";
 import { getCourseState } from "@/lib/moodle/activities";
 import { listAnswers } from "@/lib/store/quizAnswers";
 import { storeEnabled } from "@/lib/store/db";
-import { unseal, SESSION_COOKIE } from "@/lib/session";
+import { getLmsSession } from "@/lib/identity";
 import { cleanWeekTitle, topicsFromActivities, type SampleQuestion } from "@/lib/study/prompts";
+import { saveOutline, weekCounts } from "@/lib/store/practice";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,16 +18,20 @@ export type StudyWeekData = {
   weekTitle: string;
   topics: string[];
   sampleQuestions: SampleQuestion[];
+  /** Usable practice questions in the bank for this week; null when practice is unavailable. */
+  practiceCount: number | null;
 };
 
 /**
  * GET /api/study?courseId=N — one course's weeks, each with the topics derived
  * from its activity names and (when the shared bank has any) up to five real
- * questions. Read-only: nothing is stored. Prompts are built on the client from
- * this data with lib/study/prompts.ts.
+ * questions. Prompts are built on the client from this data with
+ * lib/study/prompts.ts. The only write is the shared course outline (course
+ * code, week titles, topic names: nothing about the student), saved so practice
+ * questions can be generated later without asking the LMS again.
  */
 export async function GET(req: NextRequest) {
-  const session = unseal(req.cookies.get(SESSION_COOKIE)?.value);
+  const session = await getLmsSession(req);
   if (!session) {
     return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   }
@@ -68,6 +73,16 @@ export async function GET(req: NextRequest) {
     // Bank questions are a bonus: no DB, no code, or a failed query all mean
     // "no samples", never an error.
     const useBank = storeEnabled() && !!courseCode;
+    const [counts] = await Promise.all([
+      useBank && courseCode ? weekCounts(courseCode) : Promise.resolve(null),
+      useBank && courseCode
+        ? saveOutline(
+            courseCode,
+            course.fullname,
+            weeks.map((w) => ({ week: w.weekNumber, weekTitle: w.weekTitle, topics: w.topics })),
+          )
+        : Promise.resolve(),
+    ]);
     const out: StudyWeekData[] = await Promise.all(
       weeks.map(async (w) => {
         let sampleQuestions: SampleQuestion[] = [];
@@ -80,7 +95,7 @@ export async function GET(req: NextRequest) {
             .slice(0, SAMPLES_PER_WEEK)
             .map((r) => ({ question: r.questionText }));
         }
-        return { ...w, sampleQuestions };
+        return { ...w, sampleQuestions, practiceCount: counts ? (counts.get(w.weekNumber) ?? 0) : null };
       }),
     );
 

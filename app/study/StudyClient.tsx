@@ -21,6 +21,7 @@ type Week = {
   weekTitle: string;
   topics: string[];
   sampleQuestions: SampleQuestion[];
+  practiceCount?: number | null;
 };
 
 type CourseData = {
@@ -109,6 +110,20 @@ function WeekCard({ data, week }: { data: CourseData; week: Week }) {
       </div>
       {title && <h2 className="study-week-title">{title}</h2>}
 
+      {data.course.code && (
+        <Link
+          className="btn btn-primary btn-block practice-cta"
+          href={`/study/practice?course=${encodeURIComponent(data.course.code)}&week=${week.weekNumber}`}
+        >
+          Practise
+          {typeof week.practiceCount === "number" && week.practiceCount > 0 && (
+            <span className="practice-cta-sub">
+              {week.practiceCount} question{week.practiceCount === 1 ? "" : "s"}
+            </span>
+          )}
+        </Link>
+      )}
+
       <p className="answer-value-label">What to know this week</p>
       {week.topics.length ? (
         <ul className="study-topics">
@@ -144,7 +159,7 @@ function WeekCard({ data, week }: { data: CourseData; week: Week }) {
       </details>
 
       <div className="answer-actions">
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => copy("Copied. Paste it into any chatbot.")}>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => copy("Copied. Paste it into any chatbot.")}>
           {status?.startsWith("Copied") ? "Copied ✓" : "Copy prompt"}
         </button>
         <a

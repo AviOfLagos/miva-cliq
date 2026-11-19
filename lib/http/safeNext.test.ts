@@ -37,3 +37,8 @@ test("empty input means stay put", () => {
   assert.equal(safeNextPath(null, origin), null);
   assert.equal(safeNextPath("", origin), null);
 });
+
+test("a same-origin value that normalises to a protocol-relative path is flattened", () => {
+  assert.equal(safeNextPath("/.//evil.com", "https://miva-cliq.vercel.app"), "/evil.com");
+  assert.equal(safeNextPath("/x/..//evil.com/a?b=1", "https://miva-cliq.vercel.app"), "/evil.com/a?b=1");
+});

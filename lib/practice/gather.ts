@@ -2,23 +2,18 @@
  * Gather one course-week's material from the LMS, server-side, for a single
  * generation call: page/book bodies as cleaned text, small PDFs as base64 for
  * Gemini's inline data. Videos, external links, big files and anything that
- * fails are skipped. The whole gather is time-boxed so the generate route
- * stays inside its maxDuration. Nothing here is stored: the caller keeps only
+ * fails are skipped. The whole gather is time-boxed (an AbortSignal cancels
+ * in-flight LMS requests at the deadline) and byte-budgeted (sizes are checked
+ * from the headers before a body is read, reading stops past the per-file cap,
+ * and no further files are fetched once the PDF count or inline byte budget is
+ * spent), so the generate route stays inside its maxDuration and memory. Nothing here is stored: the caller keeps only
  * the model's notes.
  */
 import type { MoodleSession } from "@/lib/moodle/auth";
 import { getCourseState } from "@/lib/moodle/activities";
 import { listCourses, codeOf } from "@/lib/moodle/courses";
-import { fetchMaterial } from "@/lib/moodle/materials";
-import {
-  capMaterial,
-  isInlinePdf,
-  MAX_FILE_BYTES,
-  MAX_INLINE_TOTAL_BYTES,
-  MAX_PDFS,
-  pickMaterialActivities,
-  type MaterialText,
-} from "./material";
+import { fetchMaterial, type MaterialOptions } from "@/lib/moodle/materials";
+import { capMaterial, InlineBudget, isInlinePdf, MAX_FILE_BYTES, pickMaterialActivities, type MaterialText } from "./material";
 
 export type GatheredMaterial = {
   texts: MaterialText[];
@@ -28,6 +23,7 @@ export type GatheredMaterial = {
 };
 
 const CONCURRENCY = 3;
+const MAX_TEXT_FILE_BYTES = 512 * 1024;
 
 /** Resolve to `fallback` if `p` has not settled by `deadline` (epoch ms). The late result is ignored. */
 function before<T>(p: Promise<T>, deadline: number, fallback: T): Promise<T> {
@@ -70,42 +66,54 @@ export async function gatherWeekMaterial(
   const acts = pickMaterialActivities(state.activities, week);
   if (!acts.length) return empty;
 
-  const results = new Array<Awaited<ReturnType<typeof fetchMaterial>> | null>(acts.length).fill(null);
+  // Every LMS fetch below is tied to the deadline: when it passes, in-flight
+  // downloads are aborted, not just ignored.
+  const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
+  const budget = new InlineBudget();
+  const raw: MaterialText[] = [];
+  const pdfs: GatheredMaterial["pdfs"] = [];
+  const isText = (contentType: string) => /^text\/plain/i.test(contentType);
+  const isPdf = (filename: string, contentType: string) =>
+    /application\/pdf/i.test(contentType) || /\.pdf$/i.test(filename);
+
+  const opts: MaterialOptions = {
+    signal,
+    beforeFile: () => budget.begin(),
+    maxBytesNow: () => (budget.full() ? 0 : budget.room()),
+    // Only PDFs and plain text are worth reading; videos and the rest are never downloaded.
+    accept: ({ filename, contentType, declaredBytes }) =>
+      isText(contentType) ? declaredBytes <= MAX_TEXT_FILE_BYTES : isPdf(filename, contentType),
+    afterFile: (f) => {
+      if (f && isText(f.contentType)) {
+        budget.end(null); // release the slot: text does not count against the PDF budget
+        return f.bytes.length <= MAX_TEXT_FILE_BYTES;
+      }
+      // A PDF is kept only if it still fits; otherwise its bytes are dropped here.
+      return !!f && isInlinePdf({ filename: f.filename, contentType: f.contentType, size: f.bytes.length }) && budget.end(f.bytes.length);
+    },
+  };
+
+  let sourceCount = 0;
   let next = 0;
   const worker = async () => {
-    while (next < acts.length && Date.now() < deadline) {
+    while (next < acts.length && !signal.aborted) {
       const i = next++;
-      results[i] = await before(fetchMaterial(session, acts[i], MAX_FILE_BYTES), deadline, null);
+      const r = await before(fetchMaterial(session, acts[i], MAX_FILE_BYTES, opts), deadline, null);
+      if (!r) continue;
+      let used = false;
+      if (r.text) {
+        raw.push({ title: acts[i].name, text: r.text });
+        used = true;
+      }
+      for (const f of r.files) {
+        if (isText(f.contentType)) raw.push({ title: f.filename, text: f.bytes.toString("utf8") });
+        else pdfs.push({ mimeType: "application/pdf", data: f.bytes.toString("base64") });
+        used = true;
+      }
+      if (used) sourceCount += 1;
     }
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, acts.length) }, worker));
-
-  const raw: MaterialText[] = [];
-  const pdfs: GatheredMaterial["pdfs"] = [];
-  let inlineBytes = 0;
-  let sourceCount = 0;
-  results.forEach((r, i) => {
-    if (!r) return;
-    let used = false;
-    if (r.text) {
-      raw.push({ title: acts[i].name, text: r.text });
-      used = true;
-    }
-    for (const f of r.files) {
-      const size = f.bytes.length;
-      if (/^text\/plain/i.test(f.contentType) && size <= 512 * 1024) {
-        raw.push({ title: f.filename, text: f.bytes.toString("utf8") });
-        used = true;
-        continue;
-      }
-      if (!isInlinePdf({ filename: f.filename, contentType: f.contentType, size })) continue;
-      if (pdfs.length >= MAX_PDFS || inlineBytes + size > MAX_INLINE_TOTAL_BYTES) continue;
-      pdfs.push({ mimeType: "application/pdf", data: f.bytes.toString("base64") });
-      inlineBytes += size;
-      used = true;
-    }
-    if (used) sourceCount += 1;
-  });
 
   const texts = capMaterial(raw);
   if (!texts.length && !pdfs.length) return empty;

@@ -15,6 +15,7 @@ import {
   type ValidQuestion,
 } from "@/lib/practice/core";
 import type { Outline } from "@/lib/practice/generate";
+import { NOTES_REFRESH_DAYS } from "@/lib/practice/limits";
 
 export class PracticeUnavailable extends Error {
   constructor() {
@@ -277,15 +278,20 @@ export async function reportQuestion(
  * throws.
  */
 
-export async function getWeekNotes(courseCode: string, week: number): Promise<string | null> {
+export async function getWeekNotes(
+  courseCode: string,
+  week: number,
+): Promise<{ notes: string; updatedAt: number } | null> {
   const sql = getDb();
   if (!sql) return null;
   try {
     const rows = (await sql`
-      SELECT notes FROM week_notes WHERE course_code = ${courseCode} AND week = ${week}
+      SELECT notes, updated_at FROM week_notes WHERE course_code = ${courseCode} AND week = ${week}
     `) as any[];
     const notes = rows[0]?.notes;
-    return typeof notes === "string" && notes.trim() ? notes : null;
+    if (typeof notes !== "string" || !notes.trim()) return null;
+    const at = new Date(rows[0].updated_at).getTime();
+    return { notes, updatedAt: Number.isFinite(at) ? at : 0 };
   } catch {
     return null;
   }
@@ -305,8 +311,9 @@ export async function notesWeeks(courseCode: string): Promise<Set<number> | null
 
 /**
  * Save notes, best effort. One row per course-week; a later save replaces it
- * only when it was built from more sources, so a thin first pass can be
- * improved but a good one is not overwritten by a worse one.
+ * when it was built from more sources, or when the saved notes are older than
+ * NOTES_REFRESH_DAYS, so a bad or poisoned set cannot sit there for good. Only
+ * the material path calls this, and only for an enrolled student.
  */
 export async function saveWeekNotes(
   courseCode: string,
@@ -327,6 +334,7 @@ export async function saveWeekNotes(
             author_hash = EXCLUDED.author_hash,
             updated_at = now()
         WHERE week_notes.source_count < EXCLUDED.source_count
+           OR week_notes.updated_at < now() - make_interval(days => ${NOTES_REFRESH_DAYS})
     `;
     return true;
   } catch {

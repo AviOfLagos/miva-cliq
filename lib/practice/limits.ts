@@ -31,3 +31,41 @@ export const LIMIT_MESSAGES: Record<"burst" | "day", string> = {
   burst: "You're creating questions very fast. Take a ten-minute break, then carry on.",
   day: "You've created a lot of questions today. Practise these, and carry on tomorrow.",
 };
+
+/* -------------------------------------------------------- source plan --- */
+
+/** Saved notes older than this are rebuilt by the next material-based generation from an enrolled student. */
+export const NOTES_REFRESH_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export type ReservationResult = "reserved" | "limited" | "unavailable";
+
+export type SourcePlan =
+  | { kind: "limited" }
+  | { kind: "notes" }
+  /** Read the LMS; if that yields nothing (or the student is not enrolled), use `fallback`. */
+  | { kind: "material"; fallback: "notes" | "outline" }
+  | { kind: "outline" };
+
+/**
+ * What one generation call is written from. The rate-limit slot is reserved
+ * before this is asked: no slot, no call. If the reservation could not be made
+ * (no database, or the query failed) the LMS is never read, so an outage of
+ * the limiter cannot be used to hammer the LMS; notes or titles still work.
+ * Fresh notes always win (no LMS access at all); stale notes are rebuilt from
+ * the material when the student can read it.
+ */
+export function planSource(i: {
+  reservation: ReservationResult;
+  notesUpdatedAt: number | null;
+  canReadLms: boolean;
+  now: number;
+}): SourcePlan {
+  if (i.reservation === "limited") return { kind: "limited" };
+  const lms = i.reservation === "reserved" && i.canReadLms;
+  if (i.notesUpdatedAt !== null) {
+    const stale = i.now - i.notesUpdatedAt > NOTES_REFRESH_DAYS * DAY_MS;
+    return stale && lms ? { kind: "material", fallback: "notes" } : { kind: "notes" };
+  }
+  return lms ? { kind: "material", fallback: "outline" } : { kind: "outline" };
+}

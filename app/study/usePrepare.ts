@@ -3,8 +3,8 @@
 /**
  * Runs "Prepare this course" / "Prepare all my courses" from the browser: for
  * each course, read its weeks fresh from /api/study, queue the weeks below the
- * bank target, then call /api/practice/generate for one week at a time with a
- * pause between calls. The rules (which weeks, when to repeat a week, when to
+ * bank target, then make ONE /api/practice/generate call per week, one at a
+ * time, with a pause between calls. The rules (which weeks, when to repeat a week, when to
  * stop) live in lib/practice/prepare.ts. The key goes only to our own server,
  * in the same header the practice page uses.
  */
@@ -124,21 +124,18 @@ export function usePrepare(opts: {
       let made = 0;
       for (let qi = 0; qi < queue.length; qi++) {
         const item = queue[qi];
-        let calls = 0;
         setLine(item.line, { status: "working" });
-        for (;;) {
+        {
+          if (made > 0) {
+            push({ message: `Pausing so your free Gemini limit isn't used up too fast…` });
+            await sleep(PAUSE_MS, () => stopRef.current);
+          }
           if (stopRef.current) {
             setLine(item.line, { status: item.count && item.count > 0 ? "partial" : "waiting" });
             push({ running: false, finished: true, message: "Stopped. Press Prepare again to carry on." });
             return;
           }
-          if (made > 0) {
-            push({ message: `Pausing so your free Gemini limit isn't used up too fast…` });
-            await sleep(PAUSE_MS, () => stopRef.current);
-            if (stopRef.current) continue;
-          }
           push({ message: `Creating questions for ${lines[item.line].label} (${qi + 1} of ${queue.length})…` });
-          calls += 1;
           made += 1;
           let status = 0;
           let json: any = null;
@@ -161,13 +158,12 @@ export function usePrepare(opts: {
             setLine(item.line, { count: outcome.bankSize });
             if (item.courseId) onCount?.(item.courseId, item.week, outcome.bankSize);
           }
-          const step = decide(outcome, calls, failuresInRow);
-          if (step.action === "again") continue;
+          const step = decide(outcome, failuresInRow);
           if (step.action === "next") {
             setLine(item.line, {
               status: step.done ? "ready" : item.count && item.count > 0 ? "partial" : "failed",
             });
-            break;
+            continue;
           }
           setLine(item.line, { status: item.count && item.count > 0 ? "partial" : "waiting" });
           push({ running: false, finished: true, message: step.message, fixKey: !!step.fixKey });

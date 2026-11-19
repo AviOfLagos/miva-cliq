@@ -2,7 +2,9 @@
  * The "Prepare this course" / "Prepare all my courses" queue, as pure rules.
  * The browser runs it: one generate request per step, one step at a time, a
  * pause between calls, so no single request runs long and the student's free
- * Gemini quota is spent evenly. Re-pressing the button rebuilds the queue from
+ * Gemini quota is spent evenly. Each week gets ONE call, which asks for enough
+ * questions to reach the target; a week that falls short after validation
+ * shows "Started" and the next press tops it up. Re-pressing the button rebuilds the queue from
  * fresh counts, so weeks that are already ready are skipped: that is what makes
  * it resumable.
  */
@@ -10,8 +12,6 @@ import { BANK_TARGET } from "./targets.ts";
 
 /** Pause between Gemini calls. The free tier allows only a handful of requests a minute. */
 export const PAUSE_MS = 6_000;
-/** A week usually needs two calls (ten questions each) to reach the target; three allows one weak batch. */
-export const MAX_CALLS_PER_WEEK = 3;
 /** Stop after this many failed calls in a row: something is wrong that retrying will not fix. */
 export const MAX_FAILURES_IN_ROW = 3;
 
@@ -46,8 +46,6 @@ export function outcomeOf(status: number, json: any): Outcome {
 }
 
 export type Step =
-  /** Call the same week again. */
-  | { action: "again" }
   /** Move to the next week in the queue. */
   | { action: "next"; done: boolean }
   /** Stop the whole run and show `message`. */
@@ -65,19 +63,13 @@ export const STOP_MESSAGES = {
 } as const;
 
 /**
- * What to do after one call. `callsThisWeek` counts the call just made;
- * `failuresInRow` includes it if it failed.
+ * What to do after a week's one call. `failuresInRow` includes this call if it
+ * failed. A week that came up short moves on as "Started" (done: false).
  */
-export function decide(
-  outcome: Outcome,
-  callsThisWeek: number,
-  failuresInRow: number,
-  target: number = BANK_TARGET,
-): Step {
+export function decide(outcome: Outcome, failuresInRow: number, target: number = BANK_TARGET): Step {
   switch (outcome.kind) {
     case "added":
-      if (outcome.bankSize >= target) return { action: "next", done: true };
-      return callsThisWeek < MAX_CALLS_PER_WEEK ? { action: "again" } : { action: "next", done: false };
+      return { action: "next", done: outcome.bankSize >= target };
     case "full":
       return { action: "next", done: true };
     case "quota":

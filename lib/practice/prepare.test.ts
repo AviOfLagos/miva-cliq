@@ -2,9 +2,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { courseSummary, weekCoverage } from "./coverage.ts";
-import { decide, MAX_CALLS_PER_WEEK, MAX_FAILURES_IN_ROW, outcomeOf, STOP_MESSAGES, weeksToPrepare } from "./prepare.ts";
+import { decide, MAX_FAILURES_IN_ROW, outcomeOf, STOP_MESSAGES, weeksToPrepare } from "./prepare.ts";
 import { DAY_SECONDS, GEN_PER_BURST, GEN_PER_DAY, generationVerdict } from "./limits.ts";
-import { BANK_TARGET } from "./targets.ts";
+import { BANK_TARGET, batchSizeFor } from "./targets.ts";
 
 /* ------------------------------------------------------------ coverage --- */
 
@@ -35,26 +35,34 @@ test("the queue picks weeks below the target, in order, and skips ready and unkn
   assert.deepEqual(weeksToPrepare([w(1, 20), w(2, 30)]), []);
 });
 
-test("a week is called again until it is ready, at most MAX_CALLS_PER_WEEK times", () => {
-  assert.deepEqual(decide({ kind: "added", bankSize: 10 }, 1, 0), { action: "again" });
-  assert.deepEqual(decide({ kind: "added", bankSize: 20 }, 2, 0), { action: "next", done: true });
-  assert.deepEqual(decide({ kind: "added", bankSize: 15 }, MAX_CALLS_PER_WEEK, 0), { action: "next", done: false });
-  assert.deepEqual(decide({ kind: "full", bankSize: 22 }, 1, 0), { action: "next", done: true });
+test("one call per week asks for enough to reach the target", () => {
+  assert.equal(batchSizeFor(0), 20);
+  assert.equal(batchSizeFor(8), 20);
+  assert.equal(batchSizeFor(12), 10);
+  assert.equal(batchSizeFor(19), 10);
+  assert.equal(batchSizeFor(20), 0);
+  assert.equal(batchSizeFor(25), 0);
+});
+
+test("each week gets one call: ready moves on as done, short moves on as started", () => {
+  assert.deepEqual(decide({ kind: "added", bankSize: 20 }, 0), { action: "next", done: true });
+  assert.deepEqual(decide({ kind: "added", bankSize: 15 }, 0), { action: "next", done: false });
+  assert.deepEqual(decide({ kind: "full", bankSize: 22 }, 0), { action: "next", done: true });
 });
 
 test("the run stops cleanly on quota, a bad key, our limit or a lost login", () => {
-  assert.deepEqual(decide({ kind: "quota" }, 1, 0), { action: "stop", message: STOP_MESSAGES.quota });
-  const bad = decide({ kind: "invalid_key" }, 1, 0);
+  assert.deepEqual(decide({ kind: "quota" }, 0), { action: "stop", message: STOP_MESSAGES.quota });
+  const bad = decide({ kind: "invalid_key" }, 0);
   assert.equal(bad.action, "stop");
   assert.equal((bad as any).fixKey, true);
-  assert.equal(decide({ kind: "limited" }, 1, 0).action, "stop");
-  assert.equal(decide({ kind: "logged_out" }, 1, 0).action, "stop");
-  assert.equal(decide({ kind: "unavailable" }, 1, 0).action, "stop");
+  assert.equal(decide({ kind: "limited" }, 0).action, "stop");
+  assert.equal(decide({ kind: "logged_out" }, 0).action, "stop");
+  assert.equal(decide({ kind: "unavailable" }, 0).action, "stop");
 });
 
 test("a failed week is skipped, and repeated failures stop the run", () => {
-  assert.deepEqual(decide({ kind: "failed" }, 1, 1), { action: "next", done: false });
-  assert.equal(decide({ kind: "failed" }, 1, MAX_FAILURES_IN_ROW).action, "stop");
+  assert.deepEqual(decide({ kind: "failed" }, 1), { action: "next", done: false });
+  assert.equal(decide({ kind: "failed" }, MAX_FAILURES_IN_ROW).action, "stop");
 });
 
 test("responses map to outcomes", () => {
@@ -72,7 +80,7 @@ test("responses map to outcomes", () => {
 /* --------------------------------------------------------- rate limit --- */
 
 test("the daily cap lets one student prepare about 8 courses of 14 weeks", () => {
-  assert.ok(GEN_PER_DAY >= 8 * 14 * 2);
+  assert.ok(GEN_PER_DAY >= 8 * 14);
   assert.ok(DAY_SECONDS === 86_400);
   assert.deepEqual(generationVerdict({ burst: 0, day: 0 }), { ok: true });
   assert.deepEqual(generationVerdict({ burst: 10, day: GEN_PER_DAY - 1 }), { ok: true });

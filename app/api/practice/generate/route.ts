@@ -3,8 +3,9 @@
  * Header: x-gemini-key: <the student's own Gemini API key>
  *
  * For a course-week whose bank holds fewer than BANK_TARGET usable questions,
- * asks Gemini (with the student's key, for this one call) for a batch of ten,
- * validates each one and saves the survivors for everyone. What the batch is
+ * asks Gemini (with the student's key, for this one call) for enough questions
+ * to reach the target in that one call (20 for an empty week, else the
+ * shortfall rounded up to ten), validates each one and saves the survivors for everyone. What the batch is
  * written from, best first:
  *
  *   1. Saved week notes: no LMS access at all.
@@ -24,7 +25,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { geminiCompleteWithKey } from "@/lib/ai/gemini";
-import { BANK_TARGET, cleanCourseCode, cleanWeek, parseBatchText, validateBatch } from "@/lib/practice/core";
+import { BANK_TARGET, batchSizeFor, cleanCourseCode, cleanWeek, parseBatchText, validateBatch } from "@/lib/practice/core";
 import {
   BATCH_SCHEMA,
   buildGenerationPrompt,
@@ -70,6 +71,13 @@ const BUDGET_MS = 54_000;
 const GATHER_MS = 16_000;
 /** Never give Gemini less than this; if the budget is that tight, skip the gather. */
 const MIN_MODEL_MS = 25_000;
+/**
+ * Room for notes plus 20 questions with explanations (~5k tokens of answer)
+ * and the thinking budget gemini-flash-latest spends first. 8192 could cut a
+ * 20-question batch short; a cut-off batch still keeps its complete questions
+ * (parseBatchText salvages them).
+ */
+const MAX_OUTPUT_TOKENS = 24_576;
 
 function cleanCourseId(v: unknown): number | null {
   const n = typeof v === "string" ? Number(v) : v;
@@ -122,6 +130,7 @@ export async function POST(req: NextRequest) {
     }
 
     const existing = bank.map((q) => q.question);
+    const count = batchSizeFor(bank.length);
     let prompt: string;
     let schema: object = BATCH_SCHEMA;
     let inline: { mimeType: string; data: string }[] = [];
@@ -129,17 +138,17 @@ export async function POST(req: NextRequest) {
     let sourceCount = 0;
 
     if (notes) {
-      prompt = buildNotesPrompt(outline, notes, undefined, existing);
+      prompt = buildNotesPrompt(outline, notes, count, existing);
       source = "notes";
     } else {
-      prompt = buildGenerationPrompt(outline, undefined, existing);
+      prompt = buildGenerationPrompt(outline, count, existing);
       const session = courseId ? await getLmsSession(req) : null;
       if (session && courseId) {
         const gatherEnd = Math.min(started + GATHER_MS, started + BUDGET_MS - MIN_MODEL_MS);
         if (await enrolledCourse(session, courseId, courseCode, gatherEnd)) {
           const m = await gatherWeekMaterial(session, courseId, week, gatherEnd);
           if (m.texts.length || m.pdfs.length) {
-            prompt = buildMaterialPrompt(outline, { texts: m.texts, pdfCount: m.pdfs.length }, undefined, existing);
+            prompt = buildMaterialPrompt(outline, { texts: m.texts, pdfCount: m.pdfs.length }, count, existing);
             schema = NOTES_BATCH_SCHEMA;
             inline = m.pdfs;
             source = "material";
@@ -150,7 +159,7 @@ export async function POST(req: NextRequest) {
     }
 
     const timeoutMs = Math.max(MIN_MODEL_MS, started + BUDGET_MS - Date.now());
-    const result = await geminiCompleteWithKey(key, prompt, { schema, inline, timeoutMs });
+    const result = await geminiCompleteWithKey(key, prompt, { schema, inline, timeoutMs, maxOutputTokens: MAX_OUTPUT_TOKENS });
     inline = [];
     // Count every call made with the key, successful or not: the limit protects their quota too.
     await recordRateEvent(student, "practice-gen");
@@ -166,7 +175,7 @@ export async function POST(req: NextRequest) {
       const weekNotes = cleanNotes((parsed as any)?.notes);
       if (weekNotes) await saveWeekNotes(courseCode, week, weekNotes, sourceCount, student);
     }
-    const valid = validateBatch(parsed, hashes);
+    const valid = validateBatch(parsed, hashes, count * 2);
     const added = await insertQuestions(courseCode, week, student, valid);
     if (!added) {
       return NextResponse.json({ error: KEY_ERROR_MESSAGES.failed, keyError: "failed" }, { status: 502 });

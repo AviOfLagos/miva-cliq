@@ -337,7 +337,7 @@ export default function PracticeClient({
             {elapsed < 8
               ? "Asking Gemini with your key…"
               : elapsed < 25
-                ? "Reading this week's material and writing ten questions…"
+                ? "Reading this week's material and writing the questions…"
                 : "Almost there. Long weeks take a little longer."}{" "}
             ({elapsed}s)
           </p>

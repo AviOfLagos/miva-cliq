@@ -13,7 +13,7 @@
  * notes: both are quoted in their own delimited blocks, with the delimiter
  * sequences stripped from inside them, and labelled as data.
  */
-import { BATCH_SIZE, MAX_EXPLANATION_CHARS, MAX_OPTION_CHARS, oneLine } from "./core.ts";
+import { BANK_TARGET, MAX_EXPLANATION_CHARS, MAX_OPTION_CHARS, oneLine } from "./core.ts";
 
 export type Outline = {
   courseCode: string;
@@ -86,7 +86,7 @@ function avoidBlock(existing: string[]): string[] {
 }
 
 
-export function buildGenerationPrompt(o: Outline, count: number = BATCH_SIZE, existing: string[] = []): string {
+export function buildGenerationPrompt(o: Outline, count: number = BANK_TARGET, existing: string[] = []): string {
   return [
     `Write ${count} multiple-choice practice questions for undergraduate students at Miva Open University, Nigeria.`,
     "",
@@ -114,7 +114,7 @@ export type MaterialInput = { texts: { title: string; text: string }[]; pdfCount
 export function buildMaterialPrompt(
   o: Outline,
   m: MaterialInput,
-  count: number = BATCH_SIZE,
+  count: number = BANK_TARGET,
   existing: string[] = [],
 ): string {
   const sources = m.texts.map((t, i) => [`## Source ${i + 1}: ${quote(t.title) || "(untitled)"}`, block(t.text)].join("\n"));
@@ -152,7 +152,7 @@ export function buildMaterialPrompt(
 }
 
 /** Later generations for a week: from the saved notes, with no LMS access at all. */
-export function buildNotesPrompt(o: Outline, notes: string, count: number = BATCH_SIZE, existing: string[] = []): string {
+export function buildNotesPrompt(o: Outline, notes: string, count: number = BANK_TARGET, existing: string[] = []): string {
   return [
     `Write ${count} multiple-choice practice questions for undergraduate students at Miva Open University, Nigeria.`,
     "",
